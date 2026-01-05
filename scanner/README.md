@@ -1,14 +1,17 @@
 # ChainGuard Scanner Service
 
-Security scanner service that orchestrates Slither and Mythril for smart contract analysis.
+Security scanner service that orchestrates multiple tools for comprehensive smart contract analysis.
 
 ## Features
 
-- **Slither Integration**: Fast static analysis
-- **Mythril Integration**: Deep symbolic execution
-- **Parallel Execution**: Runs both tools simultaneously
+- **Slither Integration**: Fast static analysis with 165+ detectors
+- **Aderyn Integration**: Modern Rust-based analysis with 17 critical detectors
+- **Echidna Integration**: Automated property-based fuzzing with 10k+ test cases
+- **Claude Mini-Audit**: AI-powered 10-step professional audit
+- **Parallel Execution**: Runs tools efficiently
 - **Result Aggregation**: Unified vulnerability format
 - **Severity Classification**: Critical, High, Medium, Low
+- **Intelligent Caching**: Redis-based caching for 30% cost savings
 
 ## API Endpoints
 
@@ -62,6 +65,9 @@ docker run -p 8000:8000 chainguard-scanner
 
 ## Configuration
 
+- `ANTHROPIC_API_KEY`: API key for Claude Mini-Audit (optional)
+- `REDIS_URL`: Redis connection URL for caching (default: redis://redis:6379)
+- `CACHE_DIR`: Directory for scanner cache (default: /app/.cache)
 - `TIMEOUT_SLITHER`: Slither timeout in seconds (default: 120)
-- `TIMEOUT_MYTHRIL`: Mythril timeout in seconds (default: 180)
-- `MAX_DEPTH`: Mythril max depth (default: 12)
+- `TIMEOUT_ADERYN`: Aderyn timeout in seconds (default: 300)
+- `TIMEOUT_ECHIDNA`: Echidna timeout in seconds (default: 600)
