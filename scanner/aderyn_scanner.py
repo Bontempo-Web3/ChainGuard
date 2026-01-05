@@ -37,7 +37,7 @@ class AderynScanner:
             Dict with scan results or handled error information
         """
         try:
-            # Verifica se Aderyn está disponível
+            # Check if Aderyn is available
             if not self._is_aderyn_available():
                 logger.warning("Aderyn not available, skipping scan")
                 return {
@@ -46,7 +46,7 @@ class AderynScanner:
                     "skipped": True
                 }
             
-            # Determina se é arquivo único ou projeto
+            # Determine if it's a single file or project
             is_single_file = os.path.isfile(target_path) and target_path.endswith('.sol')
             
             if is_single_file:
@@ -58,7 +58,7 @@ class AderynScanner:
                     "recommendation": "Use Slither for single file analysis"
                 }
             
-            # Verifica se é projeto Foundry válido
+            # Check if it's a valid Foundry project
             if not self._is_foundry_project(target_path):
                 logger.warning(f"Not a valid Foundry project: {target_path}")
                 return {
@@ -68,7 +68,7 @@ class AderynScanner:
                     "recommendation": "Aderyn requires foundry.toml in project root"
                 }
             
-            # Executa scan
+            # Execute scan
             return await self._run_aderyn(target_path)
             
         except Exception as e:
@@ -103,12 +103,12 @@ class AderynScanner:
         if not os.path.isdir(path):
             return False
         
-        # Verifica foundry.toml
+        # Check for foundry.toml
         foundry_toml = os.path.join(path, "foundry.toml")
         if not os.path.exists(foundry_toml):
             return False
         
-        # Verifica se tem src/ ou contracts/
+        # Check if it has src/ or contracts/
         src_dir = os.path.join(path, "src")
         contracts_dir = os.path.join(path, "contracts")
         
@@ -129,7 +129,7 @@ class AderynScanner:
             cmd = [
                 "aderyn",
                 project_path,
-                "--output", "json"  # Tenta output JSON se disponível
+                "--output", "json"  # Try JSON output if available
             ]
             
             logger.info(f"Running Aderyn on {project_path}")
@@ -197,14 +197,14 @@ class AderynScanner:
             
             vulnerabilities = []
             
-            # Extrai contagem de issues da tabela Issue Summary
+            # Extract issue count from Issue Summary table
             summary = self._extract_summary(content)
             
-            # Parseia High Issues
+            # Parse High Issues
             high_issues = self._extract_issues(content, "High Issues", "high")
             vulnerabilities.extend(high_issues)
             
-            # Parseia Low Issues
+            # Parse Low Issues
             low_issues = self._extract_issues(content, "Low Issues", "low")
             vulnerabilities.extend(low_issues)
             
