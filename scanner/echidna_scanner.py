@@ -39,7 +39,7 @@ class EchidnaScanner:
             Dict with fuzzing results
         """
         try:
-            # Verifica se Echidna está disponível
+            # Check if Echidna is available
             if not self._is_echidna_available():
                 logger.warning("Echidna not available, skipping fuzzing")
                 return {
@@ -48,14 +48,14 @@ class EchidnaScanner:
                     "skipped": True
                 }
             
-            # Verifica se é arquivo único ou projeto
+            # Check if it's a single file or project
             is_single_file = os.path.isfile(target_path) and target_path.endswith('.sol')
             
             if is_single_file:
-                # Echidna pode trabalhar com arquivo único
+                # Echidna can work with single file
                 return await self._run_echidna_file(target_path, test_limit)
             else:
-                # Projeto completo
+                # Full project
                 return await self._run_echidna_project(target_path, test_limit)
             
         except Exception as e:

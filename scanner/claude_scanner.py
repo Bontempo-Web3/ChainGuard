@@ -60,7 +60,7 @@ class ClaudeScanner:
             Dict with Claude's structured analysis
         """
         try:
-            # Verifica se API key está disponível
+            # Check if API key is available
             if not self.api_key:
                 logger.warning("ANTHROPIC_API_KEY not set, skipping Claude audit")
                 return {
@@ -69,17 +69,17 @@ class ClaudeScanner:
                     "skipped": True
                 }
             
-            # Inicializa cliente
+            # Initialize client
             self._init_client()
             
-            # Agrega findings de todas as ferramentas
+            # Aggregate findings from all tools
             all_findings = self._aggregate_findings(
                 slither_results,
                 aderyn_results,
                 echidna_results
             )
             
-            # Executa mini-audit
+            # Execute mini-audit
             audit_result = await self._run_mini_audit(
                 contract_code,
                 contract_name,
@@ -168,7 +168,7 @@ class ClaudeScanner:
                 findings
             )
             
-            # Chama API Anthropic (síncrono, mas roda em executor)
+            # Call Anthropic API (synchronous, but runs in executor)
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
                 None,
