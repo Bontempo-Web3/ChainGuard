@@ -63,11 +63,11 @@ class ScannerOrchestrator:
                 logger.error(f"Echidna scan failed: {echidna_results}")
                 echidna_results = {"vulnerabilities": [], "error": str(echidna_results)}
             
-            # Claude Mini-Audit (roda após as outras ferramentas)
-            # Recebe resultados de Slither, Aderyn e Echidna como input
+            # Claude Mini-Audit (runs after other tools)
+            # Receives results from Slither, Aderyn and Echidna as input
             claude_results = {"vulnerabilities": [], "skipped": True}
             
-            # Pega o primeiro contrato para análise do Claude
+            # Get first contract for Claude analysis
             if sol_files:
                 main_contract = sol_files[0]
                 try:
