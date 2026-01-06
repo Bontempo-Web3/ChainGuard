@@ -17,31 +17,97 @@ These contracts demonstrate various vulnerability patterns that ChainGuard can d
 - **FuzzOnlyVulnerable.sol** - Vulnerabilities only detectable by fuzzing
 - **Attacker.sol** - Example attack contract
 
-## Usage
+## Prerequisites
 
-### Build
+- **Foundry** - Ethereum development toolkit
+- **Docker** - For running ChainGuard scanner
+- **Git** - For dependency management
+
+### Install Foundry
+
+```shell
+curl -L https://foundry.paradigm.xyz | bash
+foundryup
+```
+
+## Setup
+
+### 1. Install Dependencies
+
+```shell
+cd contracts/examples
+forge install OpenZeppelin/openzeppelin-contracts
+```
+
+### 2. Build Contracts
 
 ```shell
 forge build
 ```
 
-### Test
+### 3. Run Tests (Optional)
 
 ```shell
 forge test
 ```
 
-### Scan with ChainGuard
+## Scanning with ChainGuard
+
+### Option 1: Using Docker (Recommended)
+
+From the project root directory:
 
 ```shell
-# From project root
+# Start the scanner service
 docker-compose up scanner
 
-# Scan these contracts
+# In another terminal, scan the contracts
 curl -X POST http://localhost:8001/scan-directory \
   -F "directory=@contracts/examples"
 ```
 
-## Foundry Documentation
+### Option 2: Scan Individual Contracts
 
-https://book.getfoundry.sh/
+```shell
+# Scan a specific contract
+curl -X POST http://localhost:8001/scan-file \
+  -F "file=@contracts/examples/src/VulnerableVault.sol"
+```
+
+### Option 3: Using the Scanner Directly
+
+If you have the scanner tools installed locally:
+
+```shell
+# Slither
+slither contracts/examples/src/
+
+# Aderyn (requires Foundry project)
+aderyn contracts/examples/
+
+# Echidna (requires test properties)
+echidna contracts/examples/src/VulnerableVault.sol
+```
+
+## Expected Scan Results
+
+### VulnerableVault.sol
+- **Critical**: Reentrancy vulnerability in `withdraw()` and `withdrawPartial()`
+- **Critical**: Missing access control in `emergencyWithdraw()`
+- **Critical**: Missing access control in `transferOwnership()`
+- **Medium**: Unchecked return value in `emergencyWithdraw()`
+
+### VulnerableToken.sol
+- **High**: Unchecked transfer return values
+- **Medium**: Missing events for critical operations
+- **Low**: Centralization risks
+
+### SecureVault.sol
+- **Clean**: Should pass all security checks
+- Demonstrates proper use of ReentrancyGuard and access control
+
+## Learning Resources
+
+- [Foundry Book](https://book.getfoundry.sh/)
+- [Solidity Security Best Practices](https://consensys.github.io/smart-contract-best-practices/)
+- [SWC Registry](https://swcregistry.io/) - Smart Contract Weakness Classification
