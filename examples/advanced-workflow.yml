@@ -1,0 +1,47 @@
+# Example: Advanced configuration with custom settings
+name: Advanced Security Scan
+
+on:
+  pull_request:
+    paths:
+      - '**.sol'
+  push:
+    branches:
+      - main
+      - develop
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    name: Security Analysis
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Run ChainGuard scan
+        id: scan
+        uses: Bontempo-Web3/ChainGuard@v1
+        with:
+          severity: 'high'
+          tools: 'both'
+          fail-on-detection: 'true'
+          solidity-version: '0.8.20'
+          target: './contracts'
+        continue-on-error: true
+      
+      - name: Display results
+        if: always()
+        run: |
+          echo "Critical: ${{ steps.scan.outputs.critical-count }}"
+          echo "High: ${{ steps.scan.outputs.high-count }}"
+          echo "Medium: ${{ steps.scan.outputs.medium-count }}"
+          echo "Low: ${{ steps.scan.outputs.low-count }}"
+          echo "Total: ${{ steps.scan.outputs.total-count }}"
+          echo "Result: ${{ steps.scan.outputs.scan-result }}"
+      
+      - name: Fail if vulnerabilities found
+        if: steps.scan.outputs.scan-result == 'failed'
+        run: |
+          echo "Security vulnerabilities detected!"
+          exit 1

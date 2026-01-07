@@ -1,0 +1,26 @@
+# Example: Test with multiple Solidity versions
+name: Multi-Version Security Scan
+
+on:
+  pull_request:
+    paths:
+      - '**.sol'
+
+jobs:
+  security-matrix:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        solidity-version: ['0.8.19', '0.8.20', '0.8.21']
+    
+    name: Scan with Solidity ${{ matrix.solidity-version }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Run ChainGuard scan
+        uses: Bontempo-Web3/ChainGuard@v1
+        with:
+          solidity-version: ${{ matrix.solidity-version }}
+          severity: 'high'
