@@ -58,13 +58,21 @@ git clone https://github.com/Bontempo-Web3/ChainGuard.git
 cd ChainGuard
 ```
 
-#### Step 2: Configure Environment Variables
+#### Step 2: Install Contract Dependencies (if using example contracts)
+
+```bash
+cd contracts/examples
+forge install OpenZeppelin/openzeppelin-contracts
+cd ../..
+```
+
+#### Step 3: Configure Environment Variables
 ```bash
 # Optional: For Claude Mini-Audit
 echo "ANTHROPIC_API_KEY=your_api_key_here" > .env
 ```
 
-#### Step 3: Build and Start Scanner
+#### Step 4: Build and Start Scanner
 ```bash
 docker-compose up --build scanner
 ```
@@ -124,30 +132,6 @@ ChainGuard/
 ```bash
 cd scanner
 python test_pipeline.py
-```
-
-### Manual Setup (without Docker)
-
-```bash
-# Install system dependencies
-# Rust (for Aderyn)
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-# Install Foundry (for Echidna)
-curl -L https://foundry.paradigm.xyz | bash
-foundryup
-
-# Install Python dependencies
-pip install -r scanner/requirements.txt
-
-# Install security tools
-pip install slither-analyzer
-cargo install aderyn
-cargo install echidna
-
-# Run scanner
-cd scanner
-python main.py
 ```
 
 ## License
