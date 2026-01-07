@@ -1,9 +1,13 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import asyncio
 from typing import List, Dict, Optional
 import logging
+import tempfile
+import shutil
+import os
+from pathlib import Path
 
 from scanner_orchestrator import ScannerOrchestrator
 
@@ -53,10 +57,57 @@ async def scan_contract(request: ScanRequest):
         logger.error(f"Scan failed: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/scan-file")
+async def scan_file(file: UploadFile = File(...)):
+    """Scan a single Solidity file"""
+    try:
+        logger.info(f"Scanning file: {file.filename}")
+        
+        with tempfile.TemporaryDirectory() as temp_dir:
+            file_path = os.path.join(temp_dir, file.filename)
+            
+            with open(file_path, "wb") as f:
+                content = await file.read()
+                f.write(content)
+            
+            result = await orchestrator.scan_directory(temp_dir)
+            
+        return result
+    except Exception as e:
+        logger.error(f"File scan failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/scan-directory")
+async def scan_directory(directory: str = Form(...)):
+    """Scan all Solidity files in a directory"""
+    try:
+        logger.info(f"Scanning directory: {directory}")
+        
+        if not os.path.exists(directory):
+            raise HTTPException(status_code=404, detail=f"Directory not found: {directory}")
+        
+        if not os.path.isdir(directory):
+            raise HTTPException(status_code=400, detail=f"Path is not a directory: {directory}")
+        
+        result = await orchestrator.scan_directory(directory)
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Directory scan failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/")
 async def root():
     return {
         "service": "ChainGuard Scanner",
         "version": "1.0.0",
-        "tools": ["slither", "mythril"]
+        "tools": ["slither", "aderyn", "echidna", "claude"],
+        "endpoints": {
+            "POST /scan": "Scan a Git repository",
+            "POST /scan-file": "Scan a single Solidity file",
+            "POST /scan-directory": "Scan all contracts in a directory",
+            "GET /health": "Health check"
+        }
     }

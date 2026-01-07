@@ -34,71 +34,9 @@ class ScannerOrchestrator:
             
             await self.git_handler.clone_repository(repository, temp_dir, commit)
             
-            sol_files = self._find_solidity_files(temp_dir)
-            if not sol_files:
-                raise Exception("No Solidity files found in repository")
+            result = await self._scan_path(temp_dir, start_time)
             
-            logger.info(f"Found {len(sol_files)} Solidity files")
-            
-            slither_task = asyncio.create_task(self.slither.scan(temp_dir))
-            aderyn_task = asyncio.create_task(self.aderyn.scan(temp_dir))
-            echidna_task = asyncio.create_task(self.echidna.scan(temp_dir, test_limit=10000))
-            
-            slither_results, aderyn_results, echidna_results = await asyncio.gather(
-                slither_task,
-                aderyn_task,
-                echidna_task,
-                return_exceptions=True
-            )
-            
-            if isinstance(slither_results, Exception):
-                logger.error(f"Slither scan failed: {slither_results}")
-                slither_results = {"vulnerabilities": [], "error": str(slither_results)}
-            
-            if isinstance(aderyn_results, Exception):
-                logger.error(f"Aderyn scan failed: {aderyn_results}")
-                aderyn_results = {"vulnerabilities": [], "error": str(aderyn_results)}
-            
-            if isinstance(echidna_results, Exception):
-                logger.error(f"Echidna scan failed: {echidna_results}")
-                echidna_results = {"vulnerabilities": [], "error": str(echidna_results)}
-            
-            # Claude Mini-Audit (runs after other tools)
-            # Receives results from Slither, Aderyn and Echidna as input
-            claude_results = {"vulnerabilities": [], "skipped": True}
-            
-            # Get first contract for Claude analysis
-            if sol_files:
-                main_contract = sol_files[0]
-                try:
-                    with open(main_contract, 'r', encoding='utf-8') as f:
-                        contract_code = f.read()
-                    
-                    contract_name = os.path.basename(main_contract).replace('.sol', '')
-                    
-                    claude_results = await self.claude.scan(
-                        contract_code,
-                        contract_name,
-                        slither_results,
-                        aderyn_results,
-                        echidna_results
-                    )
-                except Exception as e:
-                    logger.error(f"Claude scan failed: {str(e)}")
-                    claude_results = {"vulnerabilities": [], "error": str(e)}
-            
-            vulnerabilities = self._aggregate_results(slither_results, aderyn_results, echidna_results, claude_results)
-            
-            scan_duration = time.time() - start_time
-            
-            summary = self._generate_summary(vulnerabilities)
-            
-            return {
-                "status": "completed",
-                "vulnerabilities": vulnerabilities,
-                "summary": summary,
-                "scan_duration": scan_duration
-            }
+            return result
             
         except Exception as e:
             logger.error(f"Scan orchestration failed: {str(e)}")
@@ -107,6 +45,106 @@ class ScannerOrchestrator:
             if temp_dir and os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir, ignore_errors=True)
                 logger.info(f"Cleaned up temp directory: {temp_dir}")
+    
+    async def scan_directory(self, directory: str) -> Dict:
+        """Scan a local directory without cloning from Git"""
+        start_time = time.time()
+        
+        try:
+            logger.info(f"Scanning local directory: {directory}")
+            
+            result = await self._scan_path(directory, start_time)
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Directory scan failed: {str(e)}")
+            raise
+    
+    async def _scan_path(self, path: str, start_time: float) -> Dict:
+        """Internal method to scan a given path (repository or directory)"""
+        sol_files = self._find_solidity_files(path)
+        if not sol_files:
+            raise Exception("No Solidity files found in directory")
+        
+        logger.info(f"Found {len(sol_files)} Solidity files")
+        logger.info("Starting parallel security scans...")
+        
+        logger.info("→ Running Slither static analysis...")
+        slither_task = asyncio.create_task(self.slither.scan(path))
+        
+        logger.info("→ Running Aderyn Rust-based analysis...")
+        aderyn_task = asyncio.create_task(self.aderyn.scan(path))
+        
+        logger.info("→ Running Echidna fuzzing tests...")
+        echidna_task = asyncio.create_task(self.echidna.scan(path, test_limit=10000))
+        
+        slither_results, aderyn_results, echidna_results = await asyncio.gather(
+            slither_task,
+            aderyn_task,
+            echidna_task,
+            return_exceptions=True
+        )
+        
+        logger.info("✓ Slither scan completed")
+        logger.info("✓ Aderyn scan completed")
+        logger.info("✓ Echidna scan completed")
+        
+        if isinstance(slither_results, Exception):
+            logger.error(f"Slither scan failed: {slither_results}")
+            slither_results = {"vulnerabilities": [], "error": str(slither_results)}
+        
+        if isinstance(aderyn_results, Exception):
+            logger.error(f"Aderyn scan failed: {aderyn_results}")
+            aderyn_results = {"vulnerabilities": [], "error": str(aderyn_results)}
+        
+        if isinstance(echidna_results, Exception):
+            logger.error(f"Echidna scan failed: {echidna_results}")
+            echidna_results = {"vulnerabilities": [], "error": str(echidna_results)}
+        
+        # Claude Mini-Audit (runs after other tools)
+        # Receives results from Slither, Aderyn and Echidna as input
+        logger.info("→ Running Claude AI-powered mini-audit...")
+        claude_results = {"vulnerabilities": [], "skipped": True}
+        
+        # Get first contract for Claude analysis
+        if sol_files:
+            main_contract = sol_files[0]
+            try:
+                with open(main_contract, 'r', encoding='utf-8') as f:
+                    contract_code = f.read()
+                
+                contract_name = os.path.basename(main_contract).replace('.sol', '')
+                logger.info(f"  Analyzing {contract_name} with Claude...")
+                
+                claude_results = await self.claude.scan(
+                    contract_code,
+                    contract_name,
+                    slither_results,
+                    aderyn_results,
+                    echidna_results
+                )
+                logger.info("✓ Claude mini-audit completed")
+            except Exception as e:
+                logger.error(f"Claude scan failed: {str(e)}")
+                claude_results = {"vulnerabilities": [], "error": str(e)}
+        
+        logger.info("Aggregating results from all scanners...")
+        vulnerabilities = self._aggregate_results(slither_results, aderyn_results, echidna_results, claude_results)
+        
+        scan_duration = time.time() - start_time
+        
+        summary = self._generate_summary(vulnerabilities)
+        
+        logger.info(f"Scan completed in {scan_duration:.2f}s - Found {summary['total']} vulnerabilities")
+        logger.info(f"  Critical: {summary['critical']}, High: {summary['high']}, Medium: {summary['medium']}, Low: {summary['low']}")
+        
+        return {
+            "status": "completed",
+            "vulnerabilities": vulnerabilities,
+            "summary": summary,
+            "scan_duration": scan_duration
+        }
     
     def _find_solidity_files(self, directory: str) -> List[str]:
         sol_files = []
