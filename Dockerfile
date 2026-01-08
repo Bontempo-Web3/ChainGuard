@@ -27,7 +27,7 @@ RUN /root/.foundry/bin/foundryup
 RUN pip install --no-cache-dir \
     slither-analyzer==0.10.0 \
     solc-select==1.0.4 \
-    anthropic==0.39.0
+    anthropic==0.75.0
 
 # Install Solidity compiler
 RUN solc-select install 0.8.20 && solc-select use 0.8.20

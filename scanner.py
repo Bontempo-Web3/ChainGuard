@@ -290,7 +290,14 @@ class ChainGuardScanner:
         print("Running Claude Mini-Audit...")
         
         try:
-            sol_files = list(Path(self.target).rglob('*.sol'))
+            # Find .sol files, excluding out/, lib/, cache/ directories
+            all_sol = list(Path(self.target).rglob('*.sol'))
+            sol_files = [
+                f for f in all_sol 
+                if f.is_file() and not any(
+                    part in str(f) for part in ['/out/', '/lib/', '/cache/', '/node_modules/']
+                )
+            ]
             if not sol_files:
                 print("   No .sol files found")
                 return
@@ -330,6 +337,9 @@ Format: List 3-5 key findings with severity (critical/high/medium/low)."""
             
             response_text = message.content[0].text
             print(f"   Claude analysis completed")
+            print(f"\n--- Claude Mini-Audit Report ---")
+            print(response_text[:2000])
+            print(f"--- End of Claude Report ---\n")
             
             lines = response_text.split('\n')
             for line in lines:
