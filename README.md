@@ -101,6 +101,64 @@ curl -X POST http://localhost:8001/scan-directory \
 - `POST /scan-directory` - Scan all contracts in a directory
 - `GET /health` - Health check endpoint
 
+## Using as GitHub Action
+
+ChainGuard can be used as a GitHub Action to automatically scan your smart contracts on every pull request or push.
+
+### Basic Setup
+
+Create `.github/workflows/security.yml` in your repository:
+
+```yaml
+name: Security Scan
+
+on:
+  pull_request:
+    paths:
+      - '**.sol'
+  push:
+    branches:
+      - main
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run ChainGuard Security Scan
+        uses: Bontempo-Web3/ChainGuard@v1
+```
+
+### Advanced Configuration
+
+```yaml
+- name: Run ChainGuard Security Scan
+  uses: Bontempo-Web3/ChainGuard@v1
+  with:
+    severity: 'high'              # Minimum severity to fail (critical, high, medium, low)
+    tools: 'both'                 # Tools to run (slither, aderyn, both)
+    target: './contracts'         # Directory to scan
+    fail-on-detection: 'true'     # Fail CI if vulnerabilities found
+```
+
+### With Claude AI Analysis
+
+To enable Claude Mini-Audit in your GitHub Action:
+
+1. Add your Anthropic API key to repository secrets (Settings → Secrets → Actions)
+2. Enable Claude in the workflow:
+
+```yaml
+- name: Run ChainGuard with AI
+  uses: Bontempo-Web3/ChainGuard@v1
+  with:
+    claude-audit: 'true'
+    anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+For more details and examples, see [ACTION_README.md](ACTION_README.md).
+
 ## Project Structure
 
 ```
