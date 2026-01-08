@@ -59,19 +59,22 @@ class ChainGuardScanner:
         print("Running Aderyn analysis...")
         
         try:
+            # Run Aderyn (generates report.md by default)
+            cwd = self.target if os.path.isdir(self.target) else os.path.dirname(self.target) or '.'
             result = subprocess.run(
-                ['aderyn', self.target, '--output', 'aderyn-report.json'],
+                ['aderyn', '.'],
                 capture_output=True,
                 text=True,
-                timeout=300
+                timeout=300,
+                cwd=cwd
             )
             
-            if os.path.exists('aderyn-report.json'):
-                with open('aderyn-report.json', 'r') as f:
-                    data = json.load(f)
-                    issues = data.get('issues', [])
-                    print(f"   Found {len(issues)} issues with Aderyn")
-                    return issues
+            # Aderyn may crash after generating report.md, so we read report.md
+            report_path = os.path.join(cwd, 'report.md')
+            if os.path.exists(report_path):
+                issues = self._parse_aderyn_report(report_path)
+                print(f"   Found {len(issues)} issues with Aderyn")
+                return issues
             
             return []
             
@@ -80,6 +83,40 @@ class ChainGuardScanner:
             return []
         except Exception as e:
             print(f"   WARNING: Aderyn error: {str(e)}")
+            return []
+    
+    def _parse_aderyn_report(self, report_path: str) -> List[Dict[str, Any]]:
+        """Parse Aderyn report.md and extract issues"""
+        issues = []
+        try:
+            with open(report_path, 'r') as f:
+                content = f.read()
+            
+            import re
+            
+            # Extract High Issues
+            high_matches = re.findall(r'## H-\d+: ([^\n]+)', content)
+            for title in high_matches:
+                issues.append({
+                    'severity': 'high',
+                    'title': title.strip(),
+                    'description': title.strip(),
+                    'contract': 'See report.md'
+                })
+            
+            # Extract Low Issues
+            low_matches = re.findall(r'## L-\d+: ([^\n]+)', content)
+            for title in low_matches:
+                issues.append({
+                    'severity': 'low',
+                    'title': title.strip(),
+                    'description': title.strip(),
+                    'contract': 'See report.md'
+                })
+            
+            return issues
+        except Exception as e:
+            print(f"   WARNING: Error parsing Aderyn report: {str(e)}")
             return []
     
     def normalize_slither_results(self, detectors: List[Dict]) -> None:

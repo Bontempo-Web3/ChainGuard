@@ -18,6 +18,11 @@ RUN apt-get update && apt-get install -y \
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 
+# Install Foundry (required for Slither to compile Foundry projects)
+RUN curl -L https://foundry.paradigm.xyz | bash
+ENV PATH="/root/.foundry/bin:${PATH}"
+RUN /root/.foundry/bin/foundryup
+
 # Install Python security tools
 RUN pip install --no-cache-dir \
     slither-analyzer==0.10.0 \
