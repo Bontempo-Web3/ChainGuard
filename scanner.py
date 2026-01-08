@@ -133,6 +133,118 @@ class ChainGuardScanner:
             else:
                 self.results['low'].append(normalized)
     
+    def run_echidna(self) -> List[Dict[str, Any]]:
+        """Run Echidna fuzzing analysis"""
+        print("Running Echidna fuzzing...")
+        
+        try:
+            # Check if Echidna is available
+            check = subprocess.run(
+                ['echidna', '--version'],
+                capture_output=True,
+                timeout=5
+            )
+            
+            if check.returncode != 0:
+                print("   WARNING: Echidna not available")
+                return []
+            
+            # Find Solidity files
+            sol_files = list(Path(self.target).rglob('*.sol'))
+            if not sol_files:
+                print("   No .sol files found")
+                return []
+            
+            # Test first contract only (for speed in CI)
+            contract_file = sol_files[0]
+            contract_name = self._extract_contract_name(str(contract_file))
+            
+            if not contract_name:
+                print("   Could not extract contract name")
+                return []
+            
+            # Run Echidna with quick test limit
+            result = subprocess.run(
+                [
+                    'echidna',
+                    str(contract_file),
+                    '--contract', contract_name,
+                    '--test-mode', 'assertion',
+                    '--test-limit', '5000',
+                    '--format', 'text'
+                ],
+                capture_output=True,
+                text=True,
+                timeout=120,
+                cwd=self.target if os.path.isdir(self.target) else os.path.dirname(self.target)
+            )
+            
+            vulnerabilities = []
+            if result.stdout:
+                for line in result.stdout.split('\n'):
+                    if ': failed!' in line.lower():
+                        function_name = line.split(':')[0].strip()
+                        vulnerabilities.append({
+                            'type': 'assertion_failure',
+                            'title': f'Assertion failed in {function_name}',
+                            'description': f'Echidna found inputs that break the assertion',
+                            'severity': 'high',
+                            'function': function_name
+                        })
+            
+            print(f"   Found {len(vulnerabilities)} issues with Echidna")
+            return vulnerabilities
+            
+        except subprocess.TimeoutExpired:
+            print("   WARNING: Echidna timeout (2 minutes)")
+            return []
+        except Exception as e:
+            print(f"   WARNING: Echidna error: {str(e)}")
+            return []
+    
+    def _extract_contract_name(self, file_path: str) -> str:
+        """Extract main contract name from a .sol file"""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            import re
+            matches = re.findall(r'contract\s+(\w+)', content)
+            
+            if matches:
+                for match in matches:
+                    if not re.search(rf'abstract\s+contract\s+{match}', content):
+                        return match
+                return matches[0]
+            
+            return ""
+        except Exception:
+            return ""
+    
+    def normalize_echidna_results(self, vulnerabilities: List[Dict]) -> None:
+        """Normalize Echidna results into severity buckets"""
+        for vuln in vulnerabilities:
+            severity = vuln.get('severity', 'high').lower()
+            
+            normalized = {
+                'tool': 'Echidna',
+                'type': vuln.get('type', 'Unknown'),
+                'description': vuln.get('description', 'No description'),
+                'severity': severity,
+                'locations': [vuln.get('function', 'unknown')]
+            }
+            
+            self.all_findings.append(normalized)
+            
+            if severity == 'critical':
+                self.results['critical'].append(normalized)
+            elif severity == 'high':
+                self.results['high'].append(normalized)
+            elif severity == 'medium':
+                self.results['medium'].append(normalized)
+            else:
+                self.results['low'].append(normalized)
+    
     def run_claude_audit(self) -> None:
         """Run Claude Mini-Audit"""
         if not self.claude_audit or not self.anthropic_api_key:
@@ -215,6 +327,10 @@ Format: List 3-5 key findings with severity (critical/high/medium/low)."""
         if self.tools in ['aderyn', 'both']:
             aderyn_results = self.run_aderyn()
             self.normalize_aderyn_results(aderyn_results)
+        
+        # Always run Echidna fuzzing
+        echidna_results = self.run_echidna()
+        self.normalize_echidna_results(echidna_results)
         
         if self.claude_audit:
             self.run_claude_audit()

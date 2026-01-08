@@ -30,6 +30,13 @@ RUN solc-select install 0.8.20 && solc-select use 0.8.20
 # Install Aderyn
 RUN cargo install aderyn
 
+# Install Echidna (automated fuzzing)
+RUN curl -L https://github.com/crytic/echidna/releases/download/v2.2.4/echidna-2.2.4-x86_64-linux.tar.gz -o echidna.tar.gz && \
+    tar -xzf echidna.tar.gz && \
+    chmod +x echidna && \
+    mv echidna /usr/local/bin/echidna && \
+    rm echidna.tar.gz
+
 COPY entrypoint.sh /action/entrypoint.sh
 COPY scanner.py /action/scanner.py
 
