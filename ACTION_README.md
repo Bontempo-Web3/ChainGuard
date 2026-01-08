@@ -1,13 +1,14 @@
 # ChainGuard Security Scan Action
 
-Automated security scanning for Solidity smart contracts using Slither, Aderyn, and optional Claude AI.
+Automated security scanning for Solidity smart contracts using Slither, Aderyn, Echidna, and optional Claude AI.
 
 ## Features
 
-- **Multi-Tool Analysis**: Combines Slither (static analysis) and Aderyn (Rust-based analysis)
+- **Multi-Tool Analysis**: Combines Slither (static analysis), Aderyn (Rust-based analysis), and Echidna (fuzzing)
 - **AI-Powered Audit**: Optional Claude Mini-Audit for deeper analysis
 - **Configurable Severity**: Set minimum severity threshold
 - **Flexible Tools**: Run Slither, Aderyn, or both
+- **Fuzzing Tests**: Echidna property-based testing
 - **PR Comments**: Automatic vulnerability reporting (coming soon)
 - **Fast**: Optimized for CI/CD workflows
 - **Zero Config**: Works out of the box
@@ -75,7 +76,7 @@ For deeper AI-powered analysis, enable Claude:
 
 ```yaml
 - name: Run ChainGuard with Claude
-  uses: mariliabontempo/chainguard-action@v1
+  uses: Bontempo-Web3/ChainGuard@v1
   with:
     tools: 'both'
     claude-audit: 'true'
@@ -89,7 +90,7 @@ For deeper AI-powered analysis, enable Claude:
 ```yaml
 - name: Run ChainGuard Security Scan
   id: scan
-  uses: mariliabontempo/chainguard-action@v1
+  uses: Bontempo-Web3/ChainGuard@v1
   continue-on-error: true
 
 - name: Check Results
@@ -114,7 +115,7 @@ For deeper AI-powered analysis, enable Claude:
 
 - name: Run ChainGuard on Changed Files
   if: steps.changed-files.outputs.any_changed == 'true'
-  uses: mariliabontempo/chainguard-action@v1
+  uses: Bontempo-Web3/ChainGuard@v1
   with:
     target: ${{ steps.changed-files.outputs.all_changed_files }}
 ```
@@ -124,7 +125,7 @@ For deeper AI-powered analysis, enable Claude:
 | Input | Description | Required | Default |
 |-------|-------------|----------|---------|
 | `severity` | Minimum severity to fail (`critical`, `high`, `medium`, `low`) | No | `high` |
-| `tools` | Tools to run (`slither`, `mythril`, `both`) | No | `both` |
+| `tools` | Tools to run (`slither`, `aderyn`, `both`) | No | `both` |
 | `fail-on-detection` | Fail if vulnerabilities found | No | `true` |
 | `solidity-version` | Solidity compiler version | No | `0.8.20` |
 | `target` | Target directory or file to scan | No | `.` |
@@ -184,7 +185,7 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Security Scan
-        uses: mariliabontempo/chainguard-action@v1
+        uses: Bontempo-Web3/ChainGuard@v1
         with:
           severity: 'critical'
           fail-on-detection: 'true'
@@ -194,7 +195,7 @@ jobs:
 
 ```yaml
 - name: Quick Scan
-  uses: mariliabontempo/chainguard-action@v1
+  uses: Bontempo-Web3/ChainGuard@v1
   with:
     tools: 'slither'
     severity: 'high'
@@ -204,7 +205,7 @@ jobs:
 
 ```yaml
 - name: Security Audit
-  uses: mariliabontempo/chainguard-action@v1
+  uses: Bontempo-Web3/ChainGuard@v1
   with:
     fail-on-detection: 'false'
   continue-on-error: true
@@ -221,7 +222,7 @@ steps:
   - uses: actions/checkout@v4
   
   - name: Scan with Solidity ${{ matrix.solidity }}
-    uses: mariliabontempo/chainguard-action@v1
+    uses: Bontempo-Web3/ChainGuard@v1
     with:
       solidity-version: ${{ matrix.solidity }}
 ```
@@ -247,8 +248,9 @@ ChainGuard detects:
 | Tool | Average Time | Timeout |
 |------|--------------|---------|
 | Slither | 10-30 seconds | 5 minutes |
-| Mythril | 1-3 minutes | 5 minutes |
-| Both | 1-4 minutes | 10 minutes |
+| Aderyn | 20-40 seconds | 5 minutes |
+| Both | 30-60 seconds | 10 minutes |
+| With Claude | 1-2 minutes | 10 minutes |
 
 ## Troubleshooting
 
@@ -281,15 +283,17 @@ MIT License - see [LICENSE](../LICENSE) for details.
 
 ## Support
 
-- Email: support@chainguard.dev
-- Issues: [GitHub Issues](https://github.com/mariliabontempo/chainguard/issues)
-- Discussions: [GitHub Discussions](https://github.com/mariliabontempo/chainguard/discussions)
+- Email: mariliabontempo@gmail.com
+- Issues: [GitHub Issues](https://github.com/Bontempo-Web3/ChainGuard/issues)
+- Discussions: [GitHub Discussions](https://github.com/Bontempo-Web3/ChainGuard/discussions)
 
 ## Related
 
-- [ChainGuard Dashboard](https://github.com/mariliabontempo/chainguard) - Full web dashboard
+- [ChainGuard Repository](https://github.com/Bontempo-Web3/ChainGuard) - Full scanner service
 - [Slither](https://github.com/crytic/slither) - Static analysis framework
-- [Mythril](https://github.com/ConsenSys/mythril) - Security analysis tool
+- [Aderyn](https://github.com/Cyfrin/aderyn) - Rust-based security analysis tool
+- [Echidna](https://github.com/crytic/echidna) - Property-based fuzzing tool
+- [Anthropic Claude](https://www.anthropic.com/claude) - AI-powered code analysis
 
 ---
 

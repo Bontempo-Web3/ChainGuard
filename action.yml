@@ -1,6 +1,6 @@
 name: 'ChainGuard Security Scan'
-description: 'Automated security scanning for Solidity smart contracts using Slither and Aderyn'
-author: 'Marilia Bontempo'
+description: 'Automated security scanning for Solidity smart contracts using Slither, Aderyn, and Claude AI'
+author: 'Marilia and Marcos Bontempo'
 
 branding:
   icon: 'shield'
