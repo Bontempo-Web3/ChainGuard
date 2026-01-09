@@ -1,0 +1,19 @@
+# Example: Basic security scan on pull requests
+name: Security Scan
+
+on:
+  pull_request:
+    paths:
+      - '**.sol'
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    name: ChainGuard Security Scan
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Run security scan
+        uses: Bontempo-Web3/ChainGuard@v1

@@ -1,0 +1,75 @@
+name: 'ChainGuard Security Scan'
+description: 'Automated security scanning for Solidity smart contracts using Slither, Aderyn, and Claude AI'
+author: 'Marilia and Marcos Bontempo'
+
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  severity:
+    description: 'Minimum severity level to fail the check (critical, high, medium, low)'
+    required: false
+    default: 'high'
+  
+  tools:
+    description: 'Analysis tools to run (slither, aderyn, or both)'
+    required: false
+    default: 'both'
+  
+  claude-audit:
+    description: 'Enable Claude Mini-Audit (requires anthropic-api-key)'
+    required: false
+    default: 'false'
+  
+  anthropic-api-key:
+    description: 'Anthropic API key for Claude Mini-Audit'
+    required: false
+    default: ''
+  
+  fail-on-detection:
+    description: 'Fail the action if vulnerabilities are detected'
+    required: false
+    default: 'true'
+  
+  solidity-version:
+    description: 'Solidity compiler version to use'
+    required: false
+    default: '0.8.20'
+  
+  target:
+    description: 'Target directory or file to scan'
+    required: false
+    default: '.'
+  
+  github-token:
+    description: 'GitHub token for posting comments (automatically provided)'
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  critical-count:
+    description: 'Number of critical vulnerabilities found'
+  high-count:
+    description: 'Number of high severity vulnerabilities found'
+  medium-count:
+    description: 'Number of medium severity vulnerabilities found'
+  low-count:
+    description: 'Number of low severity vulnerabilities found'
+  total-count:
+    description: 'Total number of vulnerabilities found'
+  scan-result:
+    description: 'Overall scan result (passed or failed)'
+
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+  args:
+    - ${{ inputs.severity }}
+    - ${{ inputs.tools }}
+    - ${{ inputs.claude-audit }}
+    - ${{ inputs.anthropic-api-key }}
+    - ${{ inputs.fail-on-detection }}
+    - ${{ inputs.solidity-version }}
+    - ${{ inputs.target }}
+    - ${{ inputs.github-token }}
