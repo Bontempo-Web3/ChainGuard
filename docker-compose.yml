@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: chainguard-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  scanner:
+    build:
+      context: ./scanner
+      dockerfile: Dockerfile
+    container_name: chainguard-scanner
+    volumes:
+      - ./scanner:/app
+      - ./contracts:/contracts
+      - scanner-cache:/app/.cache
+      - /app/.venv
+    environment:
+      - PYTHONUNBUFFERED=1
+      - REDIS_URL=redis://redis:6379
+      - CACHE_DIR=/app/.cache
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    command: python -m uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+    ports:
+      - "8001:8001"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  redis-data:
+  scanner-cache:

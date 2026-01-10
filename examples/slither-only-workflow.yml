@@ -1,0 +1,23 @@
+# Example: Fast scan with Slither only
+name: Quick Security Check
+
+on:
+  pull_request:
+    paths:
+      - '**.sol'
+
+jobs:
+  quick-scan:
+    runs-on: ubuntu-latest
+    name: Quick Slither Scan
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Run Slither scan
+        uses: Bontempo-Web3/ChainGuard@v1
+        with:
+          tools: 'slither'
+          severity: 'critical'
+          fail-on-detection: 'true'
