@@ -22,6 +22,8 @@ export default function MonitorPage() {
   const [events, setEvents] = useState<Event[]>([])
   const [connected, setConnected] = useState(false)
 
+  const alertEvents = events.filter((e) => e.alert)
+
   useEffect(() => {
     const es = new EventSource('/api/monitor/stream')
 
@@ -74,7 +76,7 @@ export default function MonitorPage() {
           <div className="border rounded-lg p-4 bg-card">
             <div className="text-sm text-muted-foreground">Alerts</div>
             <div className="text-3xl font-bold mt-1 text-yellow-500">
-              {events.filter((e) => e.alert).length}
+              {alertEvents.length}
             </div>
           </div>
 
@@ -85,6 +87,47 @@ export default function MonitorPage() {
             <div className="text-3xl font-bold mt-1">1</div>
           </div>
         </div>
+
+        {alertEvents.length > 0 && (
+          <div className="border rounded-lg bg-card border-yellow-500/50">
+            <div className="p-4 border-b flex items-center justify-between bg-yellow-500/10">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-yellow-500" />
+                <h2 className="text-lg font-semibold">Anomaly Alerts</h2>
+              </div>
+              <span className="text-sm text-muted-foreground">
+                ML-based anomaly detection
+              </span>
+            </div>
+
+            <div className="divide-y">
+              {alertEvents.map((event) => (
+                <div
+                  key={event.id}
+                  className="p-4 flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-4">
+                    <AlertTriangle className="h-5 w-5 text-yellow-500" />
+
+                    <div>
+                      <div className="font-medium">{event.type}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {event.from} → {event.to}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-right">
+                    <div className="font-medium text-yellow-500">{event.value}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {new Date(event.timestamp).toLocaleTimeString()}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="border rounded-lg bg-card">
           <div className="p-4 border-b flex items-center justify-between">

@@ -1,5 +1,6 @@
 import WebSocket from 'ws'
 import { Interface, formatUnits } from 'ethers'
+import { TransferAnalytics } from '@/lib/transfer-analytics'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -33,13 +34,21 @@ export async function GET() {
 
   const wsUrl = `wss://eth-${network}.g.alchemy.com/v2/${apiKey}`
   const encoder = new TextEncoder()
+  const analytics = new TransferAnalytics()
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       const ws = new WebSocket(wsUrl)
+      let isClosed = false
 
       function send(data: unknown) {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
+        if (!isClosed) {
+          try {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
+          } catch (err) {
+            isClosed = true
+          }
+        }
       }
 
       ws.on('open', () => {
@@ -76,10 +85,13 @@ export async function GET() {
 
           if (parsed.name === 'Transfer') {
             const amount = formatUnits(parsed.args.value, 6)
+            const numAmount = Number(amount)
             from = shortAddr(parsed.args.from)
             to = shortAddr(parsed.args.to)
             value = `${amount} USDC`
-            alert = Number(amount) >= 100000
+
+            alert = analytics.isAnomaly(numAmount)
+            analytics.addValue(numAmount)
           } else if (parsed.name === 'Approval') {
             const amount = formatUnits(parsed.args.value, 6)
             from = shortAddr(parsed.args.owner)
@@ -107,19 +119,27 @@ export async function GET() {
 
       ws.on('close', () => {
         send({ kind: 'status', connected: false })
+        isClosed = true
         controller.close()
       })
 
       ws.on('error', () => {
         send({ kind: 'status', connected: false })
+        isClosed = true
         controller.close()
       })
 
       const heartbeat = setInterval(() => {
-        send({ kind: 'ping', timestamp: Date.now() })
+        if (!isClosed) {
+          send({ kind: 'ping', timestamp: Date.now() })
+        }
       }, 15000)
 
-      ;(controller as any)._cleanup = () => clearInterval(heartbeat)
+      ;(controller as any)._cleanup = () => {
+        clearInterval(heartbeat)
+        isClosed = true
+        ws.close()
+      }
     },
     cancel() {
       const cleanup = (this as any)?._cleanup
