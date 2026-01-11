@@ -36,7 +36,7 @@ export default function Home() {
   }
 
   const handleGithubLogin = () => {
-    window.location.href = '/api/auth/github'
+    window.location.href = 'http://localhost:3002/api/auth/github'
   }
 
   const formatTime = (timestamp: number) => {
@@ -152,7 +152,7 @@ export default function Home() {
                       Deployed
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right text-sm text-muted-foreground">
+                  <td className="px-4 py-3 text-right text-sm text-muted-foreground" suppressHydrationWarning>
                     {formatTime(project.timestamp)}
                   </td>
                 </tr>
