@@ -1,11 +1,48 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Shield, Upload, AlertTriangle, CheckCircle, XCircle } from 'lucide-react'
+import { LandingPage } from '@/components/layout/LandingPage'
+
+interface User {
+  id: number
+  login: string
+  name: string
+  avatar_url: string
+  email: string
+}
 
 export default function ScanPage() {
   const [scanning, setScanning] = useState(false)
   const [results, setResults] = useState<any>(null)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    checkAuth()
+  }, [])
+
+  const checkAuth = async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/auth/user`, {
+        credentials: 'include'
+      })
+
+      if (response.ok) {
+        const userData = await response.json()
+        setUser(userData)
+        setIsAuthenticated(true)
+      } else {
+        setIsAuthenticated(false)
+      }
+    } catch (error) {
+      console.error('Auth check failed:', error)
+      setIsAuthenticated(false)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleScan = async () => {
     setScanning(true)
@@ -23,6 +60,18 @@ export default function ScanPage() {
       })
       setScanning(false)
     }, 2000)
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return <LandingPage />
   }
 
   return (

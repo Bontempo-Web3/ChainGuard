@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { FolderUp, Github, FileCode, CheckCircle, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
+import { LandingPage } from '@/components/layout/LandingPage'
 
 interface Project {
   id: string
@@ -14,6 +15,14 @@ interface Project {
   status: 'success' | 'pending' | 'failed'
 }
 
+interface User {
+  id: number
+  login: string
+  name: string
+  avatar_url: string
+  email: string
+}
+
 const DEMO_PROJECTS: Project[] = [
   { id: '1', name: 'SimpleVault', address: '0x1234...5678', txHash: '0xabcd...efgh', network: 'Sepolia', timestamp: Date.now() - 180000, status: 'success' },
   { id: '2', name: 'TokenFactory', address: '0x8765...4321', txHash: '0xijkl...mnop', network: 'Mainnet', timestamp: Date.now() - 300000, status: 'success' },
@@ -22,7 +31,35 @@ const DEMO_PROJECTS: Project[] = [
 
 export default function Home() {
   const [projects, setProjects] = useState<Project[]>(DEMO_PROJECTS)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    checkAuth()
+  }, [])
+
+  const checkAuth = async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/auth/user`, {
+        credentials: 'include'
+      })
+
+      if (response.ok) {
+        const userData = await response.json()
+        setUser(userData)
+        setIsAuthenticated(true)
+      } else {
+        setIsAuthenticated(false)
+      }
+    } catch (error) {
+      console.error('Auth check failed:', error)
+      setIsAuthenticated(false)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleUploadClick = () => {
     fileInputRef.current?.click()
@@ -35,8 +72,8 @@ export default function Home() {
     }
   }
 
-  const handleGithubLogin = () => {
-    window.location.href = 'http://localhost:3002/api/auth/github'
+  const handleGithubConnect = () => {
+    window.location.href = '/repos'
   }
 
   const formatTime = (timestamp: number) => {
@@ -47,22 +84,24 @@ export default function Home() {
     return `${Math.floor(minutes / 60)} hours ago`
   }
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return <LandingPage />
+  }
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-2">
-          <span className="text-lg font-semibold">ChainGuard Dashboard</span>
-        </div>
-        <div className="flex items-center gap-4">
-          <button className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-            Docs
-          </button>
-          <button 
-            onClick={handleGithubLogin}
-            className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity"
-          >
-            Log in / Register
-          </button>
+        <div>
+          <h1 className="text-2xl font-bold">Welcome back, {user?.login}</h1>
+          <p className="text-sm text-muted-foreground">Manage your Web3 security projects</p>
         </div>
       </div>
 
@@ -90,7 +129,7 @@ export default function Home() {
         </button>
 
         <button
-          onClick={handleGithubLogin}
+          onClick={handleGithubConnect}
           className="group flex flex-col items-center justify-center gap-4 p-8 rounded-lg border border-border bg-card hover:bg-secondary/50 hover:border-primary/50 transition-all cursor-pointer"
         >
           <div className="p-4 rounded-full bg-secondary group-hover:bg-primary/20 transition-colors">
