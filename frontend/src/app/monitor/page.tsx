@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Bell, ArrowUpRight, ArrowDownRight, AlertTriangle } from 'lucide-react'
+import { LandingPage } from '@/components/layout/LandingPage'
 
 interface Event {
   id: string
@@ -13,6 +14,14 @@ interface Event {
   alert: boolean
 }
 
+interface User {
+  id: number
+  login: string
+  name: string
+  avatar_url: string
+  email: string
+}
+
 type StreamMessage =
   | { kind: 'status'; connected: boolean }
   | { kind: 'event'; event: Event }
@@ -21,10 +30,40 @@ type StreamMessage =
 export default function MonitorPage() {
   const [events, setEvents] = useState<Event[]>([])
   const [connected, setConnected] = useState(false)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
 
   const alertEvents = events.filter((e) => e.alert)
 
   useEffect(() => {
+    checkAuth()
+  }, [])
+
+  const checkAuth = async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/auth/user`, {
+        credentials: 'include'
+      })
+
+      if (response.ok) {
+        const userData = await response.json()
+        setUser(userData)
+        setIsAuthenticated(true)
+      } else {
+        setIsAuthenticated(false)
+      }
+    } catch (error) {
+      console.error('Auth check failed:', error)
+      setIsAuthenticated(false)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!isAuthenticated) return
+
     const es = new EventSource('/api/monitor/stream')
 
     es.onmessage = (e) => {
@@ -42,7 +81,19 @@ export default function MonitorPage() {
     es.onerror = () => setConnected(false)
 
     return () => es.close()
-  }, [])
+  }, [isAuthenticated])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return <LandingPage />
+  }
 
   return (
     <div className="min-h-screen p-8">

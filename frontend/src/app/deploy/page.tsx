@@ -1,12 +1,49 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Rocket, Wallet, CheckCircle, AlertTriangle, ExternalLink } from 'lucide-react'
+import { LandingPage } from '@/components/layout/LandingPage'
+
+interface User {
+  id: number
+  login: string
+  name: string
+  avatar_url: string
+  email: string
+}
 
 export default function DeployPage() {
   const [connected, setConnected] = useState(false)
   const [deploying, setDeploying] = useState(false)
   const [deployed, setDeployed] = useState<any>(null)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    checkAuth()
+  }, [])
+
+  const checkAuth = async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/auth/user`, {
+        credentials: 'include'
+      })
+
+      if (response.ok) {
+        const userData = await response.json()
+        setUser(userData)
+        setIsAuthenticated(true)
+      } else {
+        setIsAuthenticated(false)
+      }
+    } catch (error) {
+      console.error('Auth check failed:', error)
+      setIsAuthenticated(false)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleConnect = () => {
     // TODO: Implement Wagmi wallet connection
@@ -25,6 +62,18 @@ export default function DeployPage() {
       })
       setDeploying(false)
     }, 3000)
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return <LandingPage />
   }
 
   return (
