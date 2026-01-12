@@ -36,6 +36,8 @@ export default function ScanPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const [showLogs, setShowLogs] = useState(false)
+  const [logs, setLogs] = useState<string[]>([])
 
   // TODO: Replace mock with real data from PostgreSQL
   // When PostgreSQL is implemented:
@@ -81,12 +83,19 @@ export default function ScanPage() {
     setScanning(true)
     setError(null)
     setResults(null)
+    setLogs([])
 
     try {
-      console.log('Starting scan for:', mockProject.name)
-      console.log('Repository:', mockProject.repository)
-      console.log('Commit:', mockProject.commit)
+      const addLog = (message: string) => {
+        setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`])
+      }
 
+      addLog(`Starting scan for: ${mockProject.name}`)
+      addLog(`Repository: ${mockProject.repository}`)
+      addLog(`Commit: ${mockProject.commit}`)
+
+      addLog('Sending scan request to backend...')
+      
       const response = await fetch('/api/scan', {
         method: 'POST',
         headers: {
@@ -100,17 +109,24 @@ export default function ScanPage() {
         }),
       })
 
+      addLog(`Response status: ${response.status}`)
+
       if (!response.ok) {
         const errorData = await response.json()
+        addLog(`Error: ${errorData.error || 'Scan failed'}`)
         throw new Error(errorData.error || 'Scan failed')
       }
 
+      addLog('Parsing scan results...')
       const result = await response.json()
-      console.log('Scan completed:', result)
+      addLog(`Scan completed successfully!`)
+      addLog(`Found ${result.summary?.total || 0} vulnerabilities`)
+      addLog(`Duration: ${result.scan_duration?.toFixed(2) || 0}s`)
       setResults(result)
     } catch (err: any) {
-      console.error('Scan error:', err)
-      setError(err.message || 'Failed to scan project')
+      const errorMsg = err.message || 'Failed to scan project'
+      setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ERROR: ${errorMsg}`])
+      setError(errorMsg)
     } finally {
       setScanning(false)
     }
@@ -156,7 +172,20 @@ export default function ScanPage() {
               <Shield className="h-12 w-12 text-primary" />
             </div>
 
-            <div className="pt-4 border-t border-border">
+            <div className="pt-4 border-t border-border space-y-4">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="showLogs"
+                  checked={showLogs}
+                  onChange={(e) => setShowLogs(e.target.checked)}
+                  className="w-4 h-4 rounded border-border"
+                />
+                <label htmlFor="showLogs" className="text-sm text-muted-foreground cursor-pointer">
+                  Show logs
+                </label>
+              </div>
+
               <button
                 onClick={handleScan}
                 disabled={scanning}
@@ -181,69 +210,77 @@ export default function ScanPage() {
           </div>
         </div>
 
+        {showLogs && logs.length > 0 && (
+          <div className="border border-border rounded-lg p-6 bg-card">
+            <h3 className="text-lg font-semibold mb-4">Scan Logs</h3>
+            <div className="bg-black/90 rounded-lg p-4 font-mono text-sm max-h-96 overflow-y-auto">
+              {logs.map((log, idx) => (
+                <div key={idx} className="text-green-400 mb-1">
+                  {log}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {results && (
           <div className="border border-border rounded-lg p-6 bg-card space-y-6">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-semibold">Scan Results</h2>
               <div className="text-sm text-muted-foreground">
-                Duration: {results.scan_duration.toFixed(2)}s
+                Duration: {results.scan_duration?.toFixed(2) || 0}s
               </div>
             </div>
             
             <div className="grid grid-cols-5 gap-4">
               <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20">
                 <div className="flex items-center gap-2">
-                  <XCircle className="h-5 w-5 text-red-500" />
                   <span className="text-sm text-muted-foreground">Critical</span>
                 </div>
-                <p className="text-2xl font-bold mt-2">{results.summary.by_severity.critical}</p>
+                <p className="text-2xl font-bold mt-2">{results.summary?.by_severity?.critical || 0}</p>
               </div>
               
               <div className="p-4 rounded-lg bg-orange-500/10 border border-orange-500/20">
                 <div className="flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5 text-orange-500" />
                   <span className="text-sm text-muted-foreground">High</span>
                 </div>
-                <p className="text-2xl font-bold mt-2">{results.summary.by_severity.high}</p>
+                <p className="text-2xl font-bold mt-2">{results.summary?.by_severity?.high || 0}</p>
               </div>
               
               <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
                 <div className="flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5 text-yellow-500" />
                   <span className="text-sm text-muted-foreground">Medium</span>
                 </div>
-                <p className="text-2xl font-bold mt-2">{results.summary.by_severity.medium}</p>
+                <p className="text-2xl font-bold mt-2">{results.summary?.by_severity?.medium || 0}</p>
               </div>
               
               <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
                 <div className="flex items-center gap-2">
-                  <CheckCircle className="h-5 w-5 text-blue-500" />
                   <span className="text-sm text-muted-foreground">Low</span>
                 </div>
-                <p className="text-2xl font-bold mt-2">{results.summary.by_severity.low}</p>
+                <p className="text-2xl font-bold mt-2">{results.summary?.by_severity?.low || 0}</p>
               </div>
 
               <div className="p-4 rounded-lg bg-gray-500/10 border border-gray-500/20">
                 <div className="flex items-center gap-2">
-                  <CheckCircle className="h-5 w-5 text-gray-500" />
                   <span className="text-sm text-muted-foreground">Info</span>
                 </div>
-                <p className="text-2xl font-bold mt-2">{results.summary.by_severity.informational}</p>
+                <p className="text-2xl font-bold mt-2">{results.summary?.by_severity?.informational || 0}</p>
               </div>
             </div>
 
             <div className="pt-4 border-t border-border space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Total Vulnerabilities</span>
-                <span className="text-lg font-semibold">{results.summary.total}</span>
+                <span className="text-lg font-semibold">{results.summary?.total || 0}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Tools Used</span>
-                <span className="text-sm">{Object.keys(results.summary.by_tool).join(', ')}</span>
+                <span className="text-sm">{results.summary?.by_tool ? Object.keys(results.summary.by_tool).join(', ') : 'N/A'}</span>
               </div>
             </div>
 
-            {results.vulnerabilities.length > 0 && (
+            {results.vulnerabilities && results.vulnerabilities.length > 0 && (
               <div className="pt-4 border-t border-border space-y-3">
                 <h3 className="font-medium">Vulnerabilities</h3>
                 <div className="space-y-2 max-h-96 overflow-y-auto">
