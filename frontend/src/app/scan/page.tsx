@@ -1,7 +1,16 @@
 'use client'
 
-import { useState } from 'react'
-import { Shield, Upload, AlertTriangle, CheckCircle, XCircle, Loader2 } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Shield, AlertTriangle, CheckCircle, XCircle, Loader2 } from 'lucide-react'
+import { LandingPage } from '@/components/layout/LandingPage'
+
+interface User {
+  id: number
+  login: string
+  name: string
+  avatar_url: string
+  email: string
+}
 
 interface ScanResult {
   status: string
@@ -24,12 +33,48 @@ export default function ScanPage() {
   const [scanning, setScanning] = useState(false)
   const [results, setResults] = useState<ScanResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
 
+  // TODO: Replace mock with real data from PostgreSQL
+  // When PostgreSQL is implemented:
+  // 1. Fetch user's project list from database
+  // 2. Allow user to select project from list
+  // 3. Use repository and commit from selected project
+  // 4. Save scan results to database (scans table)
+  // 5. Link scan to project (project_id) and user (user_id)
   const mockProject = {
     id: process.env.NEXT_PUBLIC_MOCK_PROJECT_ID || '1',
     name: process.env.NEXT_PUBLIC_MOCK_PROJECT_NAME || 'GridTradingBot',
-    path: process.env.NEXT_PUBLIC_MOCK_PROJECT_PATH || '/path/to/project',
+    repository: process.env.NEXT_PUBLIC_MOCK_PROJECT_GITHUB_URL || 'https://github.com/MariliaBontempo/GridTradingBot',
+    commit: process.env.NEXT_PUBLIC_MOCK_PROJECT_COMMIT || 'main',
     type: process.env.NEXT_PUBLIC_MOCK_PROJECT_TYPE || 'github',
+  }
+
+  useEffect(() => {
+    checkAuth()
+  }, [])
+
+  const checkAuth = async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/auth/user`, {
+        credentials: 'include'
+      })
+
+      if (response.ok) {
+        const userData = await response.json()
+        setUser(userData)
+        setIsAuthenticated(true)
+      } else {
+        setIsAuthenticated(false)
+      }
+    } catch (error) {
+      console.error('Auth check failed:', error)
+      setIsAuthenticated(false)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleScan = async () => {
@@ -39,7 +84,8 @@ export default function ScanPage() {
 
     try {
       console.log('Starting scan for:', mockProject.name)
-      console.log('Project path:', mockProject.path)
+      console.log('Repository:', mockProject.repository)
+      console.log('Commit:', mockProject.commit)
 
       const response = await fetch('/api/scan', {
         method: 'POST',
@@ -47,7 +93,9 @@ export default function ScanPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          projectPath: mockProject.path,
+          repository: mockProject.repository,
+          commit: mockProject.commit,
+          branch: 'main',
           projectName: mockProject.name,
         }),
       })
@@ -66,6 +114,18 @@ export default function ScanPage() {
     } finally {
       setScanning(false)
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return <LandingPage />
   }
 
   return (
@@ -87,7 +147,10 @@ export default function ScanPage() {
                   {mockProject.name} ({mockProject.type})
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Path: {mockProject.path}
+                  Repository: {mockProject.repository}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Commit: {mockProject.commit}
                 </p>
               </div>
               <Shield className="h-12 w-12 text-primary" />

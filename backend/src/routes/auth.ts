@@ -42,7 +42,7 @@ router.get('/callback', async (req, res) => {
     req.session.githubToken = tokenData.access_token;
     req.session.user = user;
 
-    res.redirect(`${process.env.FRONTEND_URL}/repos`);
+    res.redirect(`${process.env.FRONTEND_URL}/`);
   } catch (error: any) {
     console.error('GitHub OAuth error:', error);
     res.redirect(`${process.env.FRONTEND_URL}?error=auth_failed`);

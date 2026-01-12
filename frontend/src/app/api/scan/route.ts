@@ -4,34 +4,39 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 interface ScanRequest {
-  projectPath: string
+  repository: string
+  commit: string
+  branch?: string
   projectName?: string
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body: ScanRequest = await request.json()
-    const { projectPath, projectName } = body
+    const { repository, commit, branch, projectName } = body
 
-    if (!projectPath) {
+    if (!repository || !commit) {
       return NextResponse.json(
-        { error: 'Project path is required' },
+        { error: 'Repository and commit are required' },
         { status: 400 }
       )
     }
 
     const scannerUrl = process.env.NEXT_PUBLIC_SCANNER_URL || 'http://localhost:8000'
 
-    console.log(`Starting scan for: ${projectName || projectPath}`)
+    console.log(`Starting scan for: ${projectName || repository}`)
     console.log(`Scanner URL: ${scannerUrl}`)
+    console.log(`Repository: ${repository}, Commit: ${commit}`)
 
-    const response = await fetch(`${scannerUrl}/scan-directory`, {
+    const response = await fetch(`${scannerUrl}/scan`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/json',
       },
-      body: new URLSearchParams({
-        directory: projectPath,
+      body: JSON.stringify({
+        repository,
+        commit,
+        branch: branch || 'main',
       }),
     })
 
@@ -46,7 +51,7 @@ export async function POST(request: NextRequest) {
 
     const result = await response.json()
 
-    console.log(`Scan completed for: ${projectName || projectPath}`)
+    console.log(`Scan completed for: ${projectName || repository}`)
     console.log(`Vulnerabilities found: ${result.vulnerabilities?.length || 0}`)
 
     return NextResponse.json(result)
