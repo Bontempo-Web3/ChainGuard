@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import re
 import shutil
 import tempfile
 import time
@@ -129,6 +130,23 @@ class ScannerOrchestrator:
                 logger.error(f"Claude scan failed: {str(e)}")
                 claude_results = {"vulnerabilities": [], "error": str(e)}
         
+        # Business Rules Inference
+        logger.info("→ Inferring business rules from contract...")
+        business_rules = {"rules": [], "error": "No contract analyzed"}
+        
+        if sol_files:
+            main_contract = sol_files[0]
+            try:
+                with open(main_contract, 'r', encoding='utf-8') as f:
+                    contract_code = f.read()
+                
+                contract_name = os.path.basename(main_contract).replace('.sol', '')
+                business_rules = await self.claude.infer_business_rules(contract_code, contract_name)
+                logger.info(f"✓ Inferred {len(business_rules.get('rules', []))} business rules")
+            except Exception as e:
+                logger.error(f"Business rules inference failed: {str(e)}")
+                business_rules = {"rules": [], "error": str(e)}
+        
         logger.info("Aggregating results from all scanners...")
         vulnerabilities = self._aggregate_results(slither_results, aderyn_results, echidna_results, claude_results)
         
@@ -143,6 +161,7 @@ class ScannerOrchestrator:
             "status": "completed",
             "vulnerabilities": vulnerabilities,
             "summary": summary,
+            "business_rules": business_rules,
             "scan_duration": scan_duration
         }
     
@@ -262,3 +281,189 @@ class ScannerOrchestrator:
                 summary["by_source"][source] += 1
         
         return summary
+    
+    async def generate_tests_from_rules(
+        self,
+        repository: str,
+        commit: str,
+        branch: str,
+        selected_rules: List[Dict]
+    ) -> Dict:
+        """Generate Foundry tests from selected business rules.
+        
+        Args:
+            repository: Git repository URL
+            commit: Commit hash or branch name
+            branch: Branch name
+            selected_rules: List of confirmed business rules
+            
+        Returns:
+            Dict with generated test code and execution results
+        """
+        temp_dir = None
+        try:
+            temp_dir = tempfile.mkdtemp(prefix="chainguard_tests_")
+            logger.info(f"Created temp directory for tests: {temp_dir}")
+            
+            # Clone repository
+            await self.git_handler.clone_repository(repository, temp_dir, branch)
+            
+            # Find main contract
+            sol_files = self._find_solidity_files(temp_dir)
+            if not sol_files:
+                return {"status": "error", "error": "No Solidity files found"}
+            
+            main_contract = sol_files[0]
+            with open(main_contract, 'r', encoding='utf-8') as f:
+                contract_code = f.read()
+            
+            contract_name = os.path.basename(main_contract).replace('.sol', '')
+            
+            # Generate tests using Claude
+            logger.info(f"Generating tests for {len(selected_rules)} rules...")
+            result = await self.claude.generate_tests_from_rules(
+                contract_code,
+                contract_name,
+                selected_rules
+            )
+            
+            if result.get("status") == "error":
+                return result
+            
+            # Save generated test file
+            test_dir = os.path.join(temp_dir, "test", "generated")
+            os.makedirs(test_dir, exist_ok=True)
+            test_file = os.path.join(test_dir, f"{contract_name}BusinessTest.t.sol")
+            
+            with open(test_file, 'w', encoding='utf-8') as f:
+                f.write(result["test_code"])
+            
+            logger.info(f"Saved test file: {test_file}")
+            
+            # Create ISOLATED test environment (separate from cloned repo)
+            # This prevents Forge from compiling broken dependencies in the original project
+            isolated_test_dir = tempfile.mkdtemp(prefix="chainguard_isolated_test_")
+            logger.info(f"Created isolated test environment: {isolated_test_dir}")
+            
+            try:
+                import subprocess
+                
+                # Initialize a fresh Foundry project
+                logger.info("Initializing fresh Foundry project...")
+                init_result = subprocess.run(
+                    ["forge", "init", "--no-git"],
+                    cwd=isolated_test_dir,
+                    capture_output=True,
+                    timeout=60
+                )
+                
+                if init_result.returncode != 0:
+                    logger.warning(f"Forge init warning: {init_result.stderr.decode()[:200]}")
+                
+                # Copy generated test file to isolated environment
+                isolated_test_file = os.path.join(isolated_test_dir, "test", f"{contract_name}BusinessTest.t.sol")
+                os.makedirs(os.path.dirname(isolated_test_file), exist_ok=True)
+                
+                with open(isolated_test_file, 'w', encoding='utf-8') as f:
+                    f.write(result["test_code"])
+                
+                logger.info(f"Copied test to isolated environment: {isolated_test_file}")
+                
+                # Remove default Counter files that forge init creates
+                default_files = [
+                    os.path.join(isolated_test_dir, "src", "Counter.sol"),
+                    os.path.join(isolated_test_dir, "test", "Counter.t.sol"),
+                    os.path.join(isolated_test_dir, "script", "Counter.s.sol"),
+                ]
+                for f in default_files:
+                    if os.path.exists(f):
+                        os.remove(f)
+                
+                # Run forge test in isolated environment
+                test_results = await self._run_forge_tests(isolated_test_dir, isolated_test_file)
+                
+                final_test_code = result["test_code"]
+                fix_attempted = False
+                
+                # Run fixer if: any failures OR no passing tests (compilation error)
+                needs_fix = test_results.get("failed", 0) > 0 or test_results.get("passed", 0) == 0
+                
+                if needs_fix:
+                    logger.info(f"Tests need fixing (passed={test_results.get('passed', 0)}, failed={test_results.get('failed', 0)}), attempting fix...")
+                    
+                    fix_result = await self.claude.fix_failing_tests(
+                        test_code=result["test_code"],
+                        test_output=test_results.get("output", ""),
+                        contract_name=contract_name
+                    )
+                    
+                    if fix_result.get("status") == "success":
+                        fix_attempted = True
+                        final_test_code = fix_result["test_code"]
+                        
+                        # Write fixed test file
+                        with open(isolated_test_file, 'w', encoding='utf-8') as f:
+                            f.write(final_test_code)
+                        
+                        logger.info("Fixed test file written, re-running tests...")
+                        
+                        # Re-run tests with fixed code
+                        test_results = await self._run_forge_tests(isolated_test_dir, isolated_test_file)
+                        test_results["fix_attempted"] = True
+                
+            finally:
+                # Cleanup isolated test directory
+                try:
+                    shutil.rmtree(isolated_test_dir)
+                    logger.info(f"Cleaned up isolated test directory: {isolated_test_dir}")
+                except Exception as e:
+                    logger.warning(f"Failed to cleanup isolated test directory: {e}")
+            
+            return {
+                "status": "success",
+                "contract_name": contract_name,
+                "test_code": final_test_code,
+                "rules_tested": len(selected_rules),
+                "test_results": test_results,
+                "tokens_used": result.get("tokens_used", {})
+            }
+            
+        except Exception as e:
+            logger.error(f"Test generation failed: {str(e)}")
+            return {"status": "error", "error": str(e)}
+        finally:
+            if temp_dir and os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir)
+                logger.info(f"Cleaned up temp directory: {temp_dir}")
+    
+    async def _run_forge_tests(self, project_path: str, test_file: str) -> Dict:
+        """Run forge test on generated test file."""
+        try:
+            import subprocess
+            
+            result = subprocess.run(
+                ["forge", "test", "--match-path", test_file, "-vv"],
+                cwd=project_path,
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+            
+            output = result.stdout + result.stderr
+            
+            # Parse results - count [PASS] and [FAIL: or [FAIL]
+            passed = len(re.findall(r'\[PASS\]', output))
+            failed = len(re.findall(r'\[FAIL[:\]]', output))
+            
+            return {
+                "passed": passed,
+                "failed": failed,
+                "total": passed + failed,
+                "output": output[:3000],
+                "success": failed == 0 and passed > 0
+            }
+            
+        except subprocess.TimeoutExpired:
+            return {"passed": 0, "failed": 0, "total": 0, "output": "Test execution timed out", "success": False}
+        except Exception as e:
+            return {"passed": 0, "failed": 0, "total": 0, "output": str(e), "success": False}
