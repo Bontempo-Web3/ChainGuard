@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { FolderUp, Github, FileCode, CheckCircle, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
 import { LandingPage } from '@/components/layout/LandingPage'
+import { UploadProjectModal } from '@/components/modals/UploadProjectModal'
 
 interface Project {
   id: string
@@ -34,6 +35,7 @@ export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -62,7 +64,23 @@ export default function Home() {
   }
 
   const handleUploadClick = () => {
-    fileInputRef.current?.click()
+    setIsUploadModalOpen(true)
+  }
+
+  const handleUploadSubmit = async (data: { name: string; description: string; file: File }) => {
+    console.log('Uploading project:', data)
+    
+    // TODO: Implement API call to create project
+    // const formData = new FormData()
+    // formData.append('name', data.name)
+    // formData.append('description', data.description)
+    // formData.append('file', data.file)
+    
+    // const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/projects`, {
+    //   method: 'POST',
+    //   credentials: 'include',
+    //   body: formData
+    // })
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -213,6 +231,12 @@ export default function Home() {
           </table>
         </div>
       </div>
+
+      <UploadProjectModal
+        isOpen={isUploadModalOpen}
+        onClose={() => setIsUploadModalOpen(false)}
+        onSubmit={handleUploadSubmit}
+      />
     </div>
   )
 }
