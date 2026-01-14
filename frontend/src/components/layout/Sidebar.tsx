@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { LayoutDashboard, Shield, Rocket, Activity, Github, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { WalletConnect } from '@/components/wallet/WalletConnect'
 
 const navigation = [
   { name: 'Home', href: '/', icon: LayoutDashboard },
@@ -75,6 +76,10 @@ export function Sidebar() {
             </div>
             <span className="font-semibold text-sm">ChainGuard</span>
           </Link>
+        </div>
+
+        <div className="px-3 py-3 border-b border-neutral-800">
+          <WalletConnect />
         </div>
 
         <nav className="flex-1 px-2 py-3 space-y-0.5">

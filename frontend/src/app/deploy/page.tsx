@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Rocket, Wallet, CheckCircle, AlertTriangle, ExternalLink } from 'lucide-react'
 import { LandingPage } from '@/components/layout/LandingPage'
+import { useAccount } from 'wagmi'
 
 interface User {
   id: number
@@ -13,7 +14,7 @@ interface User {
 }
 
 export default function DeployPage() {
-  const [connected, setConnected] = useState(false)
+  const { address, isConnected } = useAccount()
   const [deploying, setDeploying] = useState(false)
   const [deployed, setDeployed] = useState<any>(null)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -45,10 +46,6 @@ export default function DeployPage() {
     }
   }
 
-  const handleConnect = () => {
-    // TODO: Implement Wagmi wallet connection
-    setConnected(true)
-  }
 
   const handleDeploy = async () => {
     setDeploying(true)
@@ -92,19 +89,16 @@ export default function DeployPage() {
               <h2 className="text-lg font-semibold">Wallet Connection</h2>
               <p className="text-sm text-muted-foreground">Connect your wallet to deploy</p>
             </div>
-            {connected ? (
+            {isConnected ? (
               <div className="flex items-center gap-2 text-green-500">
                 <CheckCircle className="h-5 w-5" />
-                <span>Connected</span>
+                <span>Connected: {address?.slice(0, 6)}...{address?.slice(-4)}</span>
               </div>
             ) : (
-              <button
-                onClick={handleConnect}
-                className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg"
-              >
-                <Wallet className="h-4 w-4" />
-                Connect Wallet
-              </button>
+              <div className="flex items-center gap-2 text-yellow-500">
+                <AlertTriangle className="h-5 w-5" />
+                <span className="text-sm">Connect wallet in Sidebar to deploy</span>
+              </div>
             )}
           </div>
 
@@ -144,7 +138,7 @@ export default function DeployPage() {
 
           <button
             onClick={handleDeploy}
-            disabled={!connected || deploying}
+            disabled={!isConnected || deploying}
             className="w-full py-3 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 disabled:opacity-50"
           >
             {deploying ? 'Deploying...' : 'Deploy Contract'}

@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { Sidebar } from '@/components/layout/Sidebar'
+import { WagmiProvider } from '@/components/providers/WagmiProvider'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -18,12 +19,14 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={inter.className}>
-        <div className="flex h-screen bg-black">
-          <Sidebar />
-          <main className="flex-1 overflow-y-auto bg-neutral-900">
-            {children}
-          </main>
-        </div>
+        <WagmiProvider>
+          <div className="flex h-screen bg-black">
+            <Sidebar />
+            <main className="flex-1 overflow-y-auto bg-neutral-900">
+              {children}
+            </main>
+          </div>
+        </WagmiProvider>
       </body>
     </html>
   )
