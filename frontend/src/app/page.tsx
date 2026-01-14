@@ -5,6 +5,7 @@ import { FolderUp, Github, FileCode, CheckCircle, ExternalLink } from 'lucide-re
 import Link from 'next/link'
 import { LandingPage } from '@/components/layout/LandingPage'
 import { UploadProjectModal } from '@/components/modals/UploadProjectModal'
+import { GithubConnectModal } from '@/components/modals/GithubConnectModal'
 
 interface Project {
   id: string
@@ -36,6 +37,7 @@ export default function Home() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false)
+  const [isGithubModalOpen, setIsGithubModalOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -91,7 +93,32 @@ export default function Home() {
   }
 
   const handleGithubConnect = () => {
-    window.location.href = '/repos'
+    setIsGithubModalOpen(true)
+  }
+
+  const handleGithubSubmit = async (data: { 
+    repoUrl: string
+    repoName: string
+    repoPath: string
+    description: string 
+  }) => {
+    console.log('Connecting GitHub repo:', data)
+    
+    // TODO: Implement API call to create project
+    // const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/projects`, {
+    //   method: 'POST',
+    //   credentials: 'include',
+    //   headers: {
+    //     'Content-Type': 'application/json',
+    //   },
+    //   body: JSON.stringify({
+    //     project_name: data.repoName,
+    //     description: data.description,
+    //     project_type: 'github',
+    //     github_repo_url: data.repoUrl,
+    //     github_repo_path: data.repoPath
+    //   })
+    // })
   }
 
   const formatTime = (timestamp: number) => {
@@ -236,6 +263,12 @@ export default function Home() {
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}
         onSubmit={handleUploadSubmit}
+      />
+
+      <GithubConnectModal
+        isOpen={isGithubModalOpen}
+        onClose={() => setIsGithubModalOpen(false)}
+        onSubmit={handleGithubSubmit}
       />
     </div>
   )
