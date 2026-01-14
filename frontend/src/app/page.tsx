@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { LandingPage } from '@/components/layout/LandingPage'
 import { UploadProjectModal } from '@/components/modals/UploadProjectModal'
 import { GithubConnectModal } from '@/components/modals/GithubConnectModal'
+import { MonitorContractModal } from '@/components/modals/MonitorContractModal'
 
 interface Project {
   id: string
@@ -38,6 +39,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false)
   const [isGithubModalOpen, setIsGithubModalOpen] = useState(false)
+  const [isMonitorModalOpen, setIsMonitorModalOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -121,6 +123,32 @@ export default function Home() {
     // })
   }
 
+  const handleMonitorSubmit = async (data: {
+    contractName: string
+    contractAddress: string
+    network: string
+    chainId: string
+    tokenDecimals?: string
+  }) => {
+    console.log('Adding contract to monitor:', data)
+    
+    // TODO: Implement API call to create project
+    // const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/projects`, {
+    //   method: 'POST',
+    //   credentials: 'include',
+    //   headers: {
+    //     'Content-Type': 'application/json',
+    //   },
+    //   body: JSON.stringify({
+    //     project_name: data.contractName,
+    //     description: `Monitoring ${data.contractName} on ${data.network}`,
+    //     project_type: 'deployed',
+    //     // Additional monitoring config could be stored in a separate table
+    //     // or as JSON in the description/metadata field
+    //   })
+    // })
+  }
+
   const formatTime = (timestamp: number) => {
     const diff = Date.now() - timestamp
     const minutes = Math.floor(diff / 60000)
@@ -186,8 +214,8 @@ export default function Home() {
           </div>
         </button>
 
-        <Link
-          href="/monitor"
+        <button
+          onClick={() => setIsMonitorModalOpen(true)}
           className="group flex flex-col items-center justify-center gap-4 p-8 rounded-lg border border-border bg-card hover:bg-secondary/50 hover:border-primary/50 transition-all cursor-pointer"
         >
           <div className="p-4 rounded-full bg-secondary group-hover:bg-primary/20 transition-colors">
@@ -197,7 +225,7 @@ export default function Home() {
             <div className="font-medium mb-1">Monitor Contract</div>
             <div className="text-sm text-muted-foreground">Track deployed smart contracts</div>
           </div>
-        </Link>
+        </button>
       </div>
 
       <div>
@@ -269,6 +297,12 @@ export default function Home() {
         isOpen={isGithubModalOpen}
         onClose={() => setIsGithubModalOpen(false)}
         onSubmit={handleGithubSubmit}
+      />
+
+      <MonitorContractModal
+        isOpen={isMonitorModalOpen}
+        onClose={() => setIsMonitorModalOpen(false)}
+        onSubmit={handleMonitorSubmit}
       />
     </div>
   )
