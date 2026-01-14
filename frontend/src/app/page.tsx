@@ -105,7 +105,7 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-6 mb-8">
+      <div className="grid grid-cols-3 gap-6 mb-8">
         <input
           type="file"
           ref={fileInputRef}
@@ -140,6 +140,19 @@ export default function Home() {
             <div className="text-sm text-muted-foreground">Import from your repositories</div>
           </div>
         </button>
+
+        <Link
+          href="/monitor"
+          className="group flex flex-col items-center justify-center gap-4 p-8 rounded-lg border border-border bg-card hover:bg-secondary/50 hover:border-primary/50 transition-all cursor-pointer"
+        >
+          <div className="p-4 rounded-full bg-secondary group-hover:bg-primary/20 transition-colors">
+            <CheckCircle className="h-8 w-8 text-muted-foreground group-hover:text-primary transition-colors" />
+          </div>
+          <div className="text-center">
+            <div className="font-medium mb-1">Monitor Contract</div>
+            <div className="text-sm text-muted-foreground">Track deployed smart contracts</div>
+          </div>
+        </Link>
       </div>
 
       <div>
