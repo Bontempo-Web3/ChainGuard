@@ -365,3 +365,336 @@ Return ONLY the JSON, with no markdown or additional text."""
         vulnerabilities.sort(key=lambda x: x.get("priority", 999))
         
         return vulnerabilities
+    
+    async def infer_business_rules(self, contract_code: str, contract_name: str) -> Dict:
+        """Infer business rules and invariants from contract code.
+        
+        Args:
+            contract_code: Solidity source code
+            contract_name: Contract name
+            
+        Returns:
+            Dict with inferred business rules categorized by type
+        """
+        try:
+            if not self.api_key:
+                logger.warning("ANTHROPIC_API_KEY not set, skipping business rules inference")
+                return {"rules": [], "error": "ANTHROPIC_API_KEY not configured"}
+            
+            self._init_client()
+            
+            system_prompt = """You are a smart contract analyst specializing in extracting business rules and invariants from Solidity code.
+
+Your task is to analyze the contract and infer:
+1. Access Control Rules - Who can call what functions
+2. Financial Invariants - Rules about balances, fees, limits
+3. State Invariants - Properties that must always hold
+4. User Flow Rules - Expected sequences of operations
+5. Integration Rules - How this contract interacts with others
+
+Be specific and base everything on the actual code. Do not invent rules that aren't evidenced in the code."""
+
+            user_prompt = f"""Analyze this smart contract and extract all business rules and invariants:
+
+## Contract: {contract_name}
+
+```solidity
+{contract_code[:8000]}
+```
+
+Return a JSON with the following structure:
+```json
+{{
+  "contract_name": "{contract_name}",
+  "rules": [
+    {{
+      "id": "rule_1",
+      "category": "access_control|financial|state_invariant|user_flow|integration",
+      "description": "Clear description of the rule in English",
+      "code_reference": "Function or line that evidences this rule",
+      "testable": true,
+      "test_hint": "How to test this rule"
+    }}
+  ],
+  "summary": {{
+    "total_rules": 0,
+    "by_category": {{
+      "access_control": 0,
+      "financial": 0,
+      "state_invariant": 0,
+      "user_flow": 0,
+      "integration": 0
+    }}
+  }}
+}}
+```
+
+IMPORTANT:
+- Extract 5-15 meaningful rules
+- Focus on testable properties
+- Be specific about code references
+- Return ONLY valid JSON"""
+
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: self.client.messages.create(
+                    model=self.model,
+                    max_tokens=4000,
+                    temperature=0.1,
+                    system=system_prompt,
+                    messages=[{"role": "user", "content": user_prompt}]
+                )
+            )
+            
+            return self._parse_rules_response(response.content[0].text)
+            
+        except Exception as e:
+            logger.error(f"Business rules inference failed: {str(e)}")
+            return {"rules": [], "error": str(e)}
+    
+    def _parse_rules_response(self, response_text: str) -> Dict:
+        """Parse business rules JSON response."""
+        clean_text = response_text.strip()
+        
+        if clean_text.startswith('```json'):
+            clean_text = clean_text.split('```json')[1]
+        if clean_text.startswith('```'):
+            clean_text = clean_text[3:]
+        if clean_text.endswith('```'):
+            clean_text = clean_text[:clean_text.rfind('```')]
+        clean_text = clean_text.strip()
+        
+        try:
+            return json.loads(clean_text)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse rules response: {e}")
+            return {"rules": [], "error": f"Parse error: {str(e)}"}
+    
+    async def generate_tests_from_rules(
+        self, 
+        contract_code: str, 
+        contract_name: str, 
+        selected_rules: List[Dict]
+    ) -> Dict:
+        """Generate Foundry tests from confirmed business rules.
+        
+        Args:
+            contract_code: Solidity source code
+            contract_name: Contract name
+            selected_rules: List of confirmed business rules
+            
+        Returns:
+            Dict with generated test code and metadata
+        """
+        try:
+            if not self.api_key:
+                return {"tests": [], "error": "ANTHROPIC_API_KEY not configured"}
+            
+            self._init_client()
+            
+            rules_text = "\n".join([
+                f"{i+1}. [{r.get('category', 'unknown')}] {r.get('description', '')}\n   Code: {r.get('code_reference', 'N/A')}\n   Hint: {r.get('test_hint', 'N/A')}"
+                for i, r in enumerate(selected_rules)
+            ])
+            
+            system_prompt = """You are a Solidity test expert. Generate simple Foundry tests.
+
+ARCHITECTURE - MUST FOLLOW:
+1. ONE mock contract only (the contract being tested)
+2. ONE test contract (extends Test)
+3. NO helper contracts, NO script contracts, NO factory contracts
+4. Test deploys mock DIRECTLY with new MockContract() - test IS the owner
+
+OWNER PATTERN - CRITICAL:
+```
+contract MockBot {
+    address public owner;
+    constructor() { owner = msg.sender; }  // deployer is owner
+    modifier onlyOwner() { require(msg.sender == owner, "Not owner"); _; }
+}
+
+contract BotTest is Test {
+    MockBot bot;
+    function setUp() public {
+        bot = new MockBot();  // TEST is owner - no prank needed!
+    }
+    function test_OwnerCanCall() public {
+        bot.ownerFunction();  // Works! We deployed it, we're owner
+    }
+    function test_NonOwnerReverts() public {
+        vm.prank(address(0x123));
+        vm.expectRevert("Not owner");
+        bot.ownerFunction();
+    }
+}
+```
+
+SYNTAX RULES:
+1. Struct getters return tuples: (address a, uint b, ...) = contract.config();
+2. vm.* cheatcodes ONLY in test contract (extends Test), NOT in mocks
+3. vm.expectRevert only works before EXTERNAL calls (to other contracts), NOT internal functions
+
+OUTPUT:
+- ONLY Solidity code, NO markdown
+- Start: // SPDX-License-Identifier: MIT
+- Import: forge-std/Test.sol"""
+
+            user_prompt = f"""Generate Foundry tests for the following business rules:
+
+## Contract: {contract_name}
+
+## Contract Code (for reference):
+```solidity
+{contract_code[:6000]}
+```
+
+## Business Rules to Test:
+{rules_text}
+
+Generate a complete, compilable Foundry test file that tests ALL the rules above.
+Start directly with // SPDX-License-Identifier: MIT"""
+
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: self.client.messages.create(
+                    model=self.model,
+                    max_tokens=4000,
+                    temperature=0.1,
+                    system=system_prompt,
+                    messages=[{"role": "user", "content": user_prompt}]
+                )
+            )
+            
+            test_code = self._extract_solidity_code(response.content[0].text)
+            
+            return {
+                "status": "success",
+                "contract_name": contract_name,
+                "test_code": test_code,
+                "rules_tested": len(selected_rules),
+                "tokens_used": {
+                    "input": response.usage.input_tokens,
+                    "output": response.usage.output_tokens
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Test generation failed: {str(e)}")
+            return {"status": "error", "error": str(e), "test_code": ""}
+    
+    def _extract_solidity_code(self, response: str) -> str:
+        """Extract Solidity code from response, removing markdown."""
+        response = response.strip()
+        
+        if response.startswith("```solidity"):
+            response = response[11:]
+        elif response.startswith("```sol"):
+            response = response[6:]
+        elif response.startswith("```"):
+            response = response[3:]
+        
+        if response.endswith("```"):
+            response = response[:-3]
+        
+        if "```solidity" in response:
+            start = response.find("```solidity") + 11
+            end = response.rfind("```")
+            if end > start:
+                response = response[start:end]
+        
+        return response.strip()
+    
+    async def fix_failing_tests(
+        self,
+        test_code: str,
+        test_output: str,
+        contract_name: str
+    ) -> Dict:
+        """Fix failing tests based on error output.
+        
+        Args:
+            test_code: Original generated test code
+            test_output: Forge test output with failures
+            contract_name: Name of the contract being tested
+            
+        Returns:
+            Dict with fixed test code
+        """
+        try:
+            if not self.api_key:
+                return {"status": "error", "error": "ANTHROPIC_API_KEY not configured", "test_code": test_code}
+            
+            self._init_client()
+            
+            system_prompt = """You are a Solidity test debugging expert. Fix the failing tests.
+
+ARCHITECTURE FIX - If you see "Not owner" errors:
+1. REMOVE all helper/script/factory contracts
+2. Keep ONLY: one MockContract + one TestContract
+3. Test must deploy mock directly: bot = new MockBot();
+4. Test IS the owner - call owner functions directly, NO vm.prank needed
+
+EXAMPLE OF CORRECT PATTERN:
+```
+contract MockBot {
+    address public owner;
+    constructor() { owner = msg.sender; }
+    function ownerFunc() external { require(msg.sender == owner); }
+}
+contract BotTest is Test {
+    MockBot bot;
+    function setUp() public { bot = new MockBot(); }  // test IS owner
+    function test_Works() public { bot.ownerFunc(); }  // direct call - works!
+}
+```
+
+OTHER FIXES:
+1. "Undeclared identifier vm": Remove vm.* from mock contracts, only use in Test
+2. Struct tuples: (address a, ...) = contract.config();
+3. "call didn't revert at a lower depth": vm.expectRevert only works before EXTERNAL calls, not internal functions. Remove tests that try to use vm.expectRevert on internal helper functions.
+
+OUTPUT: ONLY fixed Solidity code, start with // SPDX-License-Identifier: MIT"""
+
+            user_prompt = f"""Fix the failing tests for {contract_name}.
+
+## Current Test Code:
+```solidity
+{test_code}
+```
+
+## Test Output (with failures):
+```
+{test_output[:2000]}
+```
+
+Fix ALL failing tests and output the complete corrected test file.
+Start directly with // SPDX-License-Identifier: MIT"""
+
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: self.client.messages.create(
+                    model=self.model,
+                    max_tokens=4000,
+                    temperature=0.1,
+                    system=system_prompt,
+                    messages=[{"role": "user", "content": user_prompt}]
+                )
+            )
+            
+            fixed_code = self._extract_solidity_code(response.content[0].text)
+            
+            return {
+                "status": "success",
+                "test_code": fixed_code,
+                "tokens_used": {
+                    "input": response.usage.input_tokens,
+                    "output": response.usage.output_tokens
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Test fix failed: {str(e)}")
+            return {"status": "error", "error": str(e), "test_code": test_code}
