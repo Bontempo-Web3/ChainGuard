@@ -534,6 +534,7 @@ SYNTAX RULES:
 1. Struct getters return tuples: (address a, uint b, ...) = contract.config();
 2. vm.* cheatcodes ONLY in test contract (extends Test), NOT in mocks
 3. vm.expectRevert only works before EXTERNAL calls (to other contracts), NOT internal functions
+4. Do NOT test environment variable edge cases (vm.envUint, vm.envAddress with empty/zero values) - Foundry behavior is unreliable
 
 OUTPUT:
 - ONLY Solidity code, NO markdown
@@ -653,7 +654,11 @@ contract BotTest is Test {
 OTHER FIXES:
 1. "Undeclared identifier vm": Remove vm.* from mock contracts, only use in Test
 2. Struct tuples: (address a, ...) = contract.config();
-3. "call didn't revert at a lower depth": vm.expectRevert only works before EXTERNAL calls, not internal functions. Remove tests that try to use vm.expectRevert on internal helper functions.
+3. "call didn't revert at a lower depth" OR "Not owner" after vm.expectRevert:
+   - Look for tests using vm.expectRevert before calling internal functions like deployBot(), configureBot(), etc.
+   - REMOVE THE ENTIRE TEST FUNCTION if it uses vm.expectRevert + internal function
+   - vm.expectRevert ONLY works before external calls (contractInstance.function())
+4. "next call did not revert as expected": Remove tests checking env var edge cases
 
 OUTPUT: ONLY fixed Solidity code, start with // SPDX-License-Identifier: MIT"""
 
