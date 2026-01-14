@@ -53,6 +53,8 @@ export async function POST(request: NextRequest) {
 
     console.log(`Scan completed for: ${projectName || repository}`)
     console.log(`Vulnerabilities found: ${result.vulnerabilities?.length || 0}`)
+    console.log(`Business rules: ${result.business_rules?.rules?.length || 0} rules`)
+    console.log('Business rules data:', JSON.stringify(result.business_rules, null, 2))
 
     return NextResponse.json(result)
   } catch (error: any) {
