@@ -35,7 +35,15 @@ class ScanResponse(BaseModel):
     status: str
     vulnerabilities: List[Dict]
     summary: Dict
+    business_rules: Optional[Dict] = None
     scan_duration: float
+
+class GenerateTestsRequest(BaseModel):
+    repository: str
+    commit: str
+    branch: Optional[str] = "main"
+    selected_rules: List[Dict]
+    contract_code: Optional[str] = None
 
 @app.get("/health")
 async def health_check():
@@ -98,6 +106,24 @@ async def scan_directory(directory: str = Form(...)):
         logger.error(f"Directory scan failed: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/generate-tests")
+async def generate_tests(request: GenerateTestsRequest):
+    """Generate Foundry tests from selected business rules"""
+    try:
+        logger.info(f"Generating tests for {len(request.selected_rules)} rules")
+        
+        result = await orchestrator.generate_tests_from_rules(
+            repository=request.repository,
+            commit=request.commit,
+            branch=request.branch,
+            selected_rules=request.selected_rules
+        )
+        
+        return result
+    except Exception as e:
+        logger.error(f"Test generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/")
 async def root():
     return {
@@ -108,6 +134,7 @@ async def root():
             "POST /scan": "Scan a Git repository",
             "POST /scan-file": "Scan a single Solidity file",
             "POST /scan-directory": "Scan all contracts in a directory",
+            "POST /generate-tests": "Generate tests from selected business rules",
             "GET /health": "Health check"
         }
     }
