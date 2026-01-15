@@ -71,6 +71,16 @@ router.post('/', async (req, res) => {
 
       console.log(`Compiling contracts at: ${contractsPath}`);
       
+      console.log('Installing Foundry dependencies...');
+      try {
+        await execAsync('forge install --no-commit', {
+          cwd: contractsPath,
+          maxBuffer: 10 * 1024 * 1024
+        });
+      } catch (installError: any) {
+        console.warn('Forge install warning:', installError.message);
+      }
+      
       let buildOutput: string;
       try {
         const result = await execAsync('forge build', {
