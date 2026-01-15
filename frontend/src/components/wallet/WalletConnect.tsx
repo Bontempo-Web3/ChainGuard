@@ -22,19 +22,19 @@ export function WalletConnect() {
 
   if (isConnected && address && status === 'connected') {
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex flex-col gap-2">
         <div className="relative">
           <button
             onClick={() => setShowNetworks(!showNetworks)}
-            className="flex items-center gap-2 px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg hover:bg-neutral-700 transition-colors"
+            className="w-full flex items-center gap-2 px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg hover:bg-neutral-700 transition-colors"
           >
             <Network className="h-4 w-4 text-primary" />
             <span className="text-sm">{currentChain?.name || 'Unknown'}</span>
-            <ChevronDown className="h-4 w-4" />
+            <ChevronDown className="h-4 w-4 ml-auto" />
           </button>
           
           {showNetworks && (
-            <div className="absolute top-full mt-2 right-0 bg-neutral-800 border border-neutral-700 rounded-lg shadow-lg min-w-[200px] z-50">
+            <div className="absolute top-full mt-2 left-0 right-0 bg-neutral-800 border border-neutral-700 rounded-lg shadow-lg z-50">
               {chains.map((chain) => (
                 <button
                   key={chain.id}
@@ -59,7 +59,7 @@ export function WalletConnect() {
           <span className="text-sm font-mono">{formatAddress(address)}</span>
           <button
             onClick={() => disconnect()}
-            className="ml-2 p-1 hover:bg-neutral-700 rounded transition-colors"
+            className="ml-auto p-1 hover:bg-neutral-700 rounded transition-colors"
             title="Disconnect"
           >
             <LogOut className="h-4 w-4 text-red-400" />
