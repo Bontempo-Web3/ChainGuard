@@ -71,10 +71,18 @@ router.post('/', async (req, res) => {
 
       console.log(`Compiling contracts at: ${contractsPath}`);
       
-      const { stdout: buildOutput } = await execAsync('forge build --json', {
-        cwd: contractsPath,
-        maxBuffer: 10 * 1024 * 1024
-      });
+      let buildOutput: string;
+      try {
+        const result = await execAsync('forge build', {
+          cwd: contractsPath,
+          maxBuffer: 10 * 1024 * 1024
+        });
+        buildOutput = result.stdout;
+        console.log('Forge build output:', buildOutput);
+      } catch (buildError: any) {
+        console.error('Forge build failed:', buildError.stderr || buildError.stdout || buildError.message);
+        throw new Error(`Contract compilation failed: ${buildError.stderr || buildError.message}`);
+      }
 
       const outDir = path.join(contractsPath, 'out');
       const contractFiles = await fs.readdir(outDir);
