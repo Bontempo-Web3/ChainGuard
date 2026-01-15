@@ -120,9 +120,18 @@ function MonitorPage() {
   }
 
   useEffect(() => {
-    if (!isAuthenticated) return
+    if (!isAuthenticated || !selectedProject) return
 
-    const es = new EventSource('/api/monitor/stream')
+    // Clear events and reset connection status when switching projects
+    setEvents([])
+    setConnected(false)
+
+    // Connect to stream for selected project
+    const es = new EventSource(`/api/monitor/stream?projectId=${selectedProject.id}`)
+
+    es.onopen = () => {
+      setConnected(true)
+    }
 
     es.onmessage = (e) => {
       const msg: StreamMessage = JSON.parse(e.data)
@@ -136,10 +145,15 @@ function MonitorPage() {
       }
     }
 
-    es.onerror = () => setConnected(false)
+    es.onerror = () => {
+      setConnected(false)
+    }
 
-    return () => es.close()
-  }, [isAuthenticated])
+    return () => {
+      es.close()
+      setConnected(false)
+    }
+  }, [isAuthenticated, selectedProject])
 
   if (loading) {
     return (
