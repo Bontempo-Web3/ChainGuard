@@ -1,21 +1,40 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { FolderUp, Github, FileCode, CheckCircle, ExternalLink } from 'lucide-react'
+import { FolderUp, Github, FileCode, CheckCircle, ExternalLink, Edit2, Trash2, XCircle } from 'lucide-react'
 import Link from 'next/link'
 import { LandingPage } from '@/components/layout/LandingPage'
 import { UploadProjectModal } from '@/components/modals/UploadProjectModal'
 import { GithubConnectModal } from '@/components/modals/GithubConnectModal'
 import { MonitorContractModal } from '@/components/modals/MonitorContractModal'
 
-interface Project {
-  id: string
-  name: string
-  address: string
-  txHash: string
+interface Contract {
+  id: number
+  projectId: number
+  contractAddress: string
   network: string
-  timestamp: number
-  status: 'success' | 'pending' | 'failed'
+  chainId: string
+  contractName: string
+  tokenDecimals: number | null
+  deploymentId: number | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+interface Project {
+  id: number
+  userId: number
+  projectName: string
+  description: string | null
+  projectType: 'github' | 'zip' | 'deployed'
+  githubRepoUrl: string | null
+  githubRepoPath: string | null
+  zipFilePath: string | null
+  scanApproved: boolean
+  isDeployed: boolean
+  createdAt: Date
+  updatedAt: Date
+  contracts: Contract[]
 }
 
 interface User {
@@ -26,14 +45,8 @@ interface User {
   email: string
 }
 
-const DEMO_PROJECTS: Project[] = [
-  { id: '1', name: 'SimpleVault', address: '0x1234...5678', txHash: '0xabcd...efgh', network: 'Sepolia', timestamp: Date.now() - 180000, status: 'success' },
-  { id: '2', name: 'TokenFactory', address: '0x8765...4321', txHash: '0xijkl...mnop', network: 'Mainnet', timestamp: Date.now() - 300000, status: 'success' },
-  { id: '3', name: 'NFTMarketplace', address: '0xfedc...ba98', txHash: '0xqrst...uvwx', network: 'Polygon', timestamp: Date.now() - 420000, status: 'success' },
-]
-
 export default function Home() {
-  const [projects, setProjects] = useState<Project[]>(DEMO_PROJECTS)
+  const [projects, setProjects] = useState<Project[]>([])
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
@@ -56,6 +69,9 @@ export default function Home() {
         const userData = await response.json()
         setUser(userData)
         setIsAuthenticated(true)
+        
+        // Fetch projects after authentication
+        await fetchProjects()
       } else {
         setIsAuthenticated(false)
       }
@@ -64,6 +80,21 @@ export default function Home() {
       setIsAuthenticated(false)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchProjects = async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/projects`, {
+        credentials: 'include'
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setProjects(data)
+      }
+    } catch (error) {
+      console.error('Failed to fetch projects:', error)
     }
   }
 
@@ -268,61 +299,117 @@ export default function Home() {
 
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Latest Projects</h2>
+          <h2 className="text-lg font-semibold">Your Projects</h2>
           <Link href="/scan" className="text-sm text-primary hover:underline">
             View all
           </Link>
         </div>
         
-        <div className="rounded-lg border border-border overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border bg-secondary/30">
-                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Project</th>
-                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Contract</th>
-                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Network</th>
-                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Status</th>
-                <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Time</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {projects.map((project) => (
-                <tr 
-                  key={project.id} 
-                  className="hover:bg-secondary/30 transition-colors cursor-pointer"
-                >
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <FileCode className="h-4 w-4 text-primary" />
-                      <span className="font-medium">{project.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <code className="text-sm text-muted-foreground font-mono">{project.address}</code>
-                      <ExternalLink className="h-3 w-3 text-muted-foreground hover:text-primary cursor-pointer" />
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="inline-flex items-center gap-1.5 text-sm">
-                      <span className="h-2 w-2 rounded-full bg-green-500"></span>
-                      {project.network}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="inline-flex items-center gap-1.5 text-sm text-green-500">
-                      <CheckCircle className="h-4 w-4" />
-                      Deployed
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right text-sm text-muted-foreground" suppressHydrationWarning>
-                    {formatTime(project.timestamp)}
-                  </td>
+        {projects.length === 0 ? (
+          <div className="rounded-lg border border-border p-12 text-center">
+            <FileCode className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+            <p className="text-muted-foreground mb-1">No projects yet</p>
+            <p className="text-sm text-muted-foreground">Create your first project using one of the options above</p>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-border overflow-hidden">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border bg-secondary/30">
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Project</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Type</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Network</th>
+                  <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Status</th>
+                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Created</th>
+                  <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {projects.map((project) => {
+                  const contract = project.contracts[0]
+                  return (
+                    <tr 
+                      key={project.id} 
+                      className="hover:bg-secondary/30 transition-colors"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <FileCode className="h-4 w-4 text-primary" />
+                          <div>
+                            <div className="font-medium">{project.projectName}</div>
+                            {project.description && (
+                              <div className="text-xs text-muted-foreground truncate max-w-xs">
+                                {project.description}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center px-2 py-1 text-xs rounded-full bg-secondary">
+                          {project.projectType === 'github' && <Github className="h-3 w-3 mr-1" />}
+                          {project.projectType === 'zip' && <FolderUp className="h-3 w-3 mr-1" />}
+                          {project.projectType === 'deployed' && <CheckCircle className="h-3 w-3 mr-1" />}
+                          {project.projectType.charAt(0).toUpperCase() + project.projectType.slice(1)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {project.isDeployed && contract ? (
+                          <span className="inline-flex items-center gap-1.5 text-sm">
+                            <span className="h-2 w-2 rounded-full bg-green-500"></span>
+                            {contract.network.charAt(0).toUpperCase() + contract.network.slice(1)}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Not deployed</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col gap-1">
+                          {project.scanApproved ? (
+                            <span className="inline-flex items-center gap-1.5 text-xs text-green-500">
+                              <CheckCircle className="h-3 w-3" />
+                              Scanned
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <XCircle className="h-3 w-3" />
+                              Not scanned
+                            </span>
+                          )}
+                          {project.isDeployed && (
+                            <span className="inline-flex items-center gap-1.5 text-xs text-green-500">
+                              <CheckCircle className="h-3 w-3" />
+                              Deployed
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-muted-foreground">
+                        {new Date(project.createdAt).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            className="p-1.5 hover:bg-secondary rounded transition-colors"
+                            title="Edit project"
+                          >
+                            <Edit2 className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                          </button>
+                          <button
+                            className="p-1.5 hover:bg-secondary rounded transition-colors"
+                            title="Delete project"
+                          >
+                            <Trash2 className="h-4 w-4 text-muted-foreground hover:text-red-500" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <UploadProjectModal
