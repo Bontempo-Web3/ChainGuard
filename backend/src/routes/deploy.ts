@@ -94,14 +94,12 @@ router.post('/', async (req, res) => {
 src = "src"
 out = "out"
 libs = ["lib"]
+optimizer = true
+optimizer_runs = 200
 remappings = [
   "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
   "forge-std/=lib/forge-std/src/"
 ]
-
-[profile.default.optimizer]
-enabled = true
-runs = 200
 `;
         await fs.writeFile(path.join(projectRoot, 'foundry.toml'), foundryToml);
         console.log('Created foundry.toml with remappings');
