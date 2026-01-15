@@ -72,19 +72,32 @@ export default function Home() {
   }
 
   const handleUploadSubmit = async (data: { name: string; description: string; file: File }) => {
-    console.log('Uploading project:', data)
-    
-    // TODO: Implement API call to create project
-    // const formData = new FormData()
-    // formData.append('name', data.name)
-    // formData.append('description', data.description)
-    // formData.append('file', data.file)
-    
-    // const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/projects`, {
-    //   method: 'POST',
-    //   credentials: 'include',
-    //   body: formData
-    // })
+    try {
+      const formData = new FormData()
+      formData.append('name', data.name)
+      formData.append('description', data.description)
+      formData.append('file', data.file)
+      
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/projects/upload`, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to upload project')
+      }
+
+      const result = await response.json()
+      console.log('Project uploaded successfully:', result)
+
+      // Reload the page to show the new project
+      window.location.reload()
+    } catch (error: any) {
+      console.error('Upload error:', error)
+      alert(`Failed to upload project: ${error.message}`)
+    }
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
