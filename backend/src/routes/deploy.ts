@@ -76,11 +76,11 @@ router.post('/', async (req, res) => {
       await fs.mkdir(libDir, { recursive: true });
       
       try {
-        await execAsync('git clone https://github.com/foundry-rs/forge-std.git lib/forge-std', {
+        await execAsync('git clone --depth 1 https://github.com/foundry-rs/forge-std.git lib/forge-std', {
           cwd: contractsPath,
           maxBuffer: 10 * 1024 * 1024
         });
-        await execAsync('git clone https://github.com/OpenZeppelin/openzeppelin-contracts.git lib/openzeppelin-contracts', {
+        await execAsync('git clone --depth 1 --branch v4.9.0 https://github.com/OpenZeppelin/openzeppelin-contracts.git lib/openzeppelin-contracts', {
           cwd: contractsPath,
           maxBuffer: 10 * 1024 * 1024
         });
