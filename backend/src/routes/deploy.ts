@@ -1,0 +1,293 @@
+import express from 'express';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import { ProjectRepository } from '../repositories/ProjectRepository';
+import { ContractRepository } from '../repositories/ContractRepository';
+
+const execAsync = promisify(exec);
+const router = express.Router();
+
+interface DeployRequest {
+  projectId: number;
+  network: string;
+  contractName?: string;
+}
+
+router.post('/', async (req, res) => {
+  try {
+    const { projectId, network, contractName } = req.body as DeployRequest;
+    const userId = (req.session as any).userId;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    if (!projectId || !network) {
+      return res.status(400).json({ error: 'Missing required fields: projectId, network' });
+    }
+
+    const project = await ProjectRepository.findById(projectId);
+    
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    console.log('Deploy authorization check:', {
+      sessionUserId: userId,
+      projectUserId: project.user_id,
+      projectId: project.id
+    });
+
+    if (project.user_id !== userId) {
+      return res.status(403).json({ 
+        error: 'Not authorized to deploy this project',
+        debug: { sessionUserId: userId, projectUserId: project.user_id }
+      });
+    }
+
+    if (project.project_type !== 'github' && project.project_type !== 'zip') {
+      return res.status(400).json({ error: 'Only GitHub and ZIP projects can be deployed' });
+    }
+
+    const tempDir = path.join('/tmp', `chainguard_deploy_${Date.now()}`);
+    await fs.mkdir(tempDir, { recursive: true });
+
+    try {
+      let contractsPath: string;
+
+      let projectRoot: string;
+      
+      if (project.project_type === 'github' && project.github_repo_url) {
+        console.log(`Cloning repository: ${project.github_repo_url}`);
+        // Clone main branch with --recursive to get submodules (dependencies)
+        await execAsync(`git clone --recursive -b main ${project.github_repo_url} ${tempDir}`, {
+          maxBuffer: 50 * 1024 * 1024
+        });
+        // Ensure submodules are fully initialized
+        try {
+          await execAsync('git submodule update --init --recursive', {
+            cwd: tempDir,
+            maxBuffer: 50 * 1024 * 1024
+          });
+          console.log('Submodules initialized');
+        } catch (e) {
+          console.log('No submodules or submodule init failed');
+        }
+        projectRoot = tempDir;
+        contractsPath = path.join(tempDir, project.github_repo_path || 'src');
+      } else if (project.project_type === 'zip' && project.zip_file_path) {
+        console.log(`Extracting ZIP: ${project.zip_file_path}`);
+        await execAsync(`unzip -q ${project.zip_file_path} -d ${tempDir}`);
+        projectRoot = tempDir;
+        contractsPath = tempDir;
+      } else {
+        throw new Error('Invalid project configuration');
+      }
+
+      console.log(`Project root: ${projectRoot}`);
+      console.log(`Contracts path: ${contractsPath}`);
+      
+      // Check if project has lib/ directory with dependencies
+      const libDir = path.join(projectRoot, 'lib');
+      let hasLib = false;
+      try {
+        const libContents = await fs.readdir(libDir);
+        hasLib = libContents.length > 0;
+        console.log('Existing lib/ contents:', libContents);
+      } catch (e) {
+        console.log('No lib/ directory found');
+      }
+      
+      // If no dependencies, try to install them
+      if (!hasLib) {
+        console.log('Installing Foundry dependencies...');
+        await fs.mkdir(libDir, { recursive: true });
+        
+        // Try forge install first (reads from foundry.toml if configured)
+        try {
+          await execAsync('forge install', {
+            cwd: projectRoot,
+            maxBuffer: 10 * 1024 * 1024
+          });
+          console.log('forge install completed');
+        } catch (e) {
+          console.log('forge install failed');
+        }
+        
+        // Verify if lib/ was actually populated
+        let libPopulated = false;
+        try {
+          const libContents = await fs.readdir(libDir);
+          libPopulated = libContents.length > 0;
+          console.log('After forge install, lib/ contents:', libContents);
+        } catch (e) {
+          // lib/ doesn't exist
+        }
+        
+        // If still empty, install common dependencies using git clone
+        if (!libPopulated) {
+          console.log('lib/ still empty, cloning dependencies directly');
+          
+          try {
+            await execAsync('git clone --depth 1 https://github.com/foundry-rs/forge-std.git lib/forge-std', {
+              cwd: projectRoot,
+              maxBuffer: 10 * 1024 * 1024
+            });
+            console.log('Cloned forge-std');
+          } catch (e: any) {
+            console.error('forge-std clone error:', e.stderr || e.message);
+          }
+          
+          try {
+            // Use v4.9.6 for compatibility with most Foundry projects (v5.x removed safeApprove)
+            await execAsync('git clone --depth 1 --branch v4.9.6 https://github.com/OpenZeppelin/openzeppelin-contracts.git lib/openzeppelin-contracts', {
+              cwd: projectRoot,
+              maxBuffer: 10 * 1024 * 1024
+            });
+            console.log('Cloned openzeppelin-contracts v4.9.6');
+          } catch (e: any) {
+            console.error('openzeppelin clone error:', e.stderr || e.message);
+          }
+          
+          // Final check of lib contents
+          try {
+            const finalLibContents = await fs.readdir(libDir);
+            console.log('Final lib/ contents:', finalLibContents);
+            
+            // Create remappings.txt if dependencies were installed
+            if (finalLibContents.length > 0) {
+              const remappings: string[] = [];
+              if (finalLibContents.includes('forge-std')) {
+                remappings.push('forge-std/=lib/forge-std/src/');
+              }
+              if (finalLibContents.includes('openzeppelin-contracts')) {
+                // Map v5.x paths to v4.x paths for common differences
+                remappings.push('@openzeppelin/contracts/utils/ReentrancyGuard.sol=lib/openzeppelin-contracts/contracts/security/ReentrancyGuard.sol');
+                remappings.push('@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/');
+              }
+              if (remappings.length > 0) {
+                await fs.writeFile(path.join(projectRoot, 'remappings.txt'), remappings.join('\n'));
+                console.log('Created remappings.txt');
+              }
+            }
+          } catch (e) {
+            console.error('lib/ still does not exist');
+          }
+        }
+      }
+      
+      // Try to compile
+      let buildOutput: string;
+      try {
+        const result = await execAsync('forge build', {
+          cwd: projectRoot,
+          maxBuffer: 50 * 1024 * 1024
+        });
+        buildOutput = result.stdout;
+        console.log('Forge build output:', buildOutput);
+      } catch (buildError: any) {
+        console.error('Forge build failed:', buildError.stderr || buildError.stdout || buildError.message);
+        throw new Error(`Contract compilation failed: ${buildError.stderr || buildError.message}`);
+      }
+
+      const outDir = path.join(projectRoot, 'out');
+      const contractFiles = await fs.readdir(outDir);
+      
+      let targetContract = contractName;
+      if (!targetContract) {
+        const solFiles = contractFiles.filter(f => f.endsWith('.sol'));
+        if (solFiles.length === 0) {
+          throw new Error('No compiled contracts found');
+        }
+        targetContract = solFiles[0].replace('.sol', '');
+      }
+
+      const contractDir = path.join(outDir, `${targetContract}.sol`);
+      const contractJsonPath = path.join(contractDir, `${targetContract}.json`);
+      
+      const contractJson = JSON.parse(await fs.readFile(contractJsonPath, 'utf-8'));
+      
+      const bytecode = contractJson.bytecode?.object || contractJson.bytecode;
+      const abi = contractJson.abi;
+
+      if (!bytecode || !abi) {
+        throw new Error('Contract compilation failed: missing bytecode or ABI');
+      }
+
+      await fs.rm(tempDir, { recursive: true, force: true });
+
+      res.json({
+        success: true,
+        contractName: targetContract,
+        bytecode,
+        abi,
+        network
+      });
+
+    } catch (error: any) {
+      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+      throw error;
+    }
+
+  } catch (error: any) {
+    console.error('Deploy compilation error:', error);
+    res.status(500).json({ 
+      error: 'Failed to compile contract',
+      details: error.message 
+    });
+  }
+});
+
+router.post('/save', async (req, res) => {
+  try {
+    const { 
+      projectId, 
+      contractAddress, 
+      network, 
+      chainId, 
+      contractName,
+      transactionHash 
+    } = req.body;
+    
+    const userId = (req.session as any).userId;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const project = await ProjectRepository.findById(projectId);
+    
+    if (!project || project.user_id !== userId) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+
+    const contract = await ContractRepository.create({
+      project_id: projectId,
+      contract_address: contractAddress,
+      network,
+      chain_id: chainId.toString(),
+      contract_name: contractName,
+      token_decimals: null,
+      deployment_id: null
+    });
+
+    await ProjectRepository.update(projectId, { isDeployed: true });
+
+    res.json({
+      success: true,
+      contract,
+      transactionHash
+    });
+
+  } catch (error: any) {
+    console.error('Save deployment error:', error);
+    res.status(500).json({ 
+      error: 'Failed to save deployment',
+      details: error.message 
+    });
+  }
+});
+
+export default router;

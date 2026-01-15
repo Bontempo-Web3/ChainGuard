@@ -5,7 +5,8 @@ import dotenv from 'dotenv';
 import { sessionConfig } from './config/github';
 import authRoutes from './routes/auth';
 import reposRoutes from './routes/repos';
-import projectsRouter from './routes/projects'
+import projectsRouter from './routes/projects';
+import deployRouter from './routes/deploy';
 
 dotenv.config();
 
@@ -29,6 +30,7 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/repos', reposRoutes);
 app.use('/api/projects', projectsRouter);
+app.use('/api/deploy', deployRouter);
 
 app.listen(PORT, () => {
   console.log(`ChainGuard Backend running on http://localhost:${PORT}`);
