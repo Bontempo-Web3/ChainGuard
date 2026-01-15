@@ -57,31 +57,36 @@ router.post('/', async (req, res) => {
     try {
       let contractsPath: string;
 
+      let projectRoot: string;
+      
       if (project.project_type === 'github' && project.github_repo_url) {
         console.log(`Cloning repository: ${project.github_repo_url}`);
         await execAsync(`git clone ${project.github_repo_url} ${tempDir}`);
-        contractsPath = path.join(tempDir, project.github_repo_path || '.');
+        projectRoot = tempDir;
+        contractsPath = path.join(tempDir, project.github_repo_path || 'src');
       } else if (project.project_type === 'zip' && project.zip_file_path) {
         console.log(`Extracting ZIP: ${project.zip_file_path}`);
         await execAsync(`unzip -q ${project.zip_file_path} -d ${tempDir}`);
+        projectRoot = tempDir;
         contractsPath = tempDir;
       } else {
         throw new Error('Invalid project configuration');
       }
 
-      console.log(`Compiling contracts at: ${contractsPath}`);
+      console.log(`Project root: ${projectRoot}`);
+      console.log(`Contracts path: ${contractsPath}`);
       
       console.log('Installing Foundry dependencies...');
-      const libDir = path.join(contractsPath, 'lib');
+      const libDir = path.join(projectRoot, 'lib');
       await fs.mkdir(libDir, { recursive: true });
       
       try {
         await execAsync('git clone --depth 1 https://github.com/foundry-rs/forge-std.git lib/forge-std', {
-          cwd: contractsPath,
+          cwd: projectRoot,
           maxBuffer: 10 * 1024 * 1024
         });
         await execAsync('git clone --depth 1 --branch v4.9.0 https://github.com/OpenZeppelin/openzeppelin-contracts.git lib/openzeppelin-contracts', {
-          cwd: contractsPath,
+          cwd: projectRoot,
           maxBuffer: 10 * 1024 * 1024
         });
         
@@ -94,7 +99,7 @@ remappings = [
   "forge-std/=lib/forge-std/src/"
 ]
 `;
-        await fs.writeFile(path.join(contractsPath, 'foundry.toml'), foundryToml);
+        await fs.writeFile(path.join(projectRoot, 'foundry.toml'), foundryToml);
         
         console.log('Dependencies installed successfully');
       } catch (installError: any) {
@@ -104,7 +109,7 @@ remappings = [
       let buildOutput: string;
       try {
         const result = await execAsync('forge build', {
-          cwd: contractsPath,
+          cwd: projectRoot,
           maxBuffer: 10 * 1024 * 1024
         });
         buildOutput = result.stdout;
@@ -114,7 +119,7 @@ remappings = [
         throw new Error(`Contract compilation failed: ${buildError.stderr || buildError.message}`);
       }
 
-      const outDir = path.join(contractsPath, 'out');
+      const outDir = path.join(projectRoot, 'out');
       const contractFiles = await fs.readdir(outDir);
       
       let targetContract = contractName;
