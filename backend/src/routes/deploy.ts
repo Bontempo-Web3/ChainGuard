@@ -90,7 +90,22 @@ router.post('/', async (req, res) => {
           maxBuffer: 10 * 1024 * 1024
         });
         
-        const foundryToml = `[profile.default]
+        const foundryTomlPath = path.join(projectRoot, 'foundry.toml');
+        let existingFoundryToml = '';
+        try {
+          existingFoundryToml = await fs.readFile(foundryTomlPath, 'utf-8');
+        } catch (e) {
+          // File doesn't exist, will create new one
+        }
+        
+        if (existingFoundryToml) {
+          console.log('Existing foundry.toml found, appending remappings');
+          if (!existingFoundryToml.includes('@openzeppelin/contracts/')) {
+            existingFoundryToml += '\n# Added by ChainGuard deploy\nremappings = [\n  "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",\n  "forge-std/=lib/forge-std/src/"\n]\n';
+            await fs.writeFile(foundryTomlPath, existingFoundryToml);
+          }
+        } else {
+          const foundryToml = `[profile.default]
 src = "src"
 out = "out"
 libs = ["lib"]
@@ -99,7 +114,8 @@ remappings = [
   "forge-std/=lib/forge-std/src/"
 ]
 `;
-        await fs.writeFile(path.join(projectRoot, 'foundry.toml'), foundryToml);
+          await fs.writeFile(foundryTomlPath, foundryToml);
+        }
         
         console.log('Dependencies installed successfully');
       } catch (installError: any) {
