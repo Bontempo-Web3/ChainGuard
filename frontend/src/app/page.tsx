@@ -117,23 +117,35 @@ export default function Home() {
     repoPath: string
     description: string 
   }) => {
-    console.log('Connecting GitHub repo:', data)
-    
-    // TODO: Implement API call to create project
-    // const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/projects`, {
-    //   method: 'POST',
-    //   credentials: 'include',
-    //   headers: {
-    //     'Content-Type': 'application/json',
-    //   },
-    //   body: JSON.stringify({
-    //     project_name: data.repoName,
-    //     description: data.description,
-    //     project_type: 'github',
-    //     github_repo_url: data.repoUrl,
-    //     github_repo_path: data.repoPath
-    //   })
-    // })
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/projects/github`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          repoUrl: data.repoUrl,
+          repoName: data.repoName,
+          repoPath: data.repoPath,
+          description: data.description
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to connect repository')
+      }
+
+      const result = await response.json()
+      console.log('Repository connected successfully:', result)
+
+      // Reload the page to show the new project
+      window.location.reload()
+    } catch (error: any) {
+      console.error('GitHub connect error:', error)
+      alert(`Failed to connect repository: ${error.message}`)
+    }
   }
 
   const handleMonitorSubmit = async (data: {

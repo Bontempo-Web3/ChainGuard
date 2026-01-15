@@ -30,9 +30,10 @@ export function GithubConnectModal({ isOpen, onClose, onSubmit }: GithubConnectM
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedRepo, setSelectedRepo] = useState<GitHubRepo | null>(null)
-  const [repoPath, setRepoPath] = useState('./contracts')
+  const [repoPath, setRepoPath] = useState('./')
   const [description, setDescription] = useState('')
   const [errors, setErrors] = useState<{ repo?: string; path?: string }>({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
     if (isOpen) {
@@ -85,20 +86,21 @@ export function GithubConnectModal({ isOpen, onClose, onSubmit }: GithubConnectM
       return
     }
     
+    setIsSubmitting(true)
     onSubmit({
       repoUrl: selectedRepo!.html_url,
       repoName: selectedRepo!.full_name,
       repoPath,
       description
     })
-    handleClose()
   }
 
   const handleClose = () => {
     setSelectedRepo(null)
-    setRepoPath('./contracts')
+    setRepoPath('./')
     setDescription('')
     setErrors({})
+    setIsSubmitting(false)
     onClose()
   }
 
@@ -106,7 +108,17 @@ export function GithubConnectModal({ isOpen, onClose, onSubmit }: GithubConnectM
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-card border border-border rounded-lg w-full max-w-3xl max-h-[90vh] flex flex-col">
+      <div className="bg-card border border-border rounded-lg w-full max-w-3xl max-h-[90vh] flex flex-col relative">
+        {isSubmitting && (
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-10 rounded-lg">
+            <div className="text-center">
+              <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">Cloning repository...</p>
+              <p className="text-xs text-muted-foreground mt-1">This may take a moment</p>
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center justify-between p-6 border-b border-border">
           <div>
             <h2 className="text-xl font-semibold">Connect GitHub Repository</h2>
@@ -116,7 +128,8 @@ export function GithubConnectModal({ isOpen, onClose, onSubmit }: GithubConnectM
           </div>
           <button
             onClick={handleClose}
-            className="text-muted-foreground hover:text-foreground transition-colors"
+            disabled={isSubmitting}
+            className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <X className="h-5 w-5" />
           </button>
@@ -155,7 +168,8 @@ export function GithubConnectModal({ isOpen, onClose, onSubmit }: GithubConnectM
                       key={repo.id}
                       type="button"
                       onClick={() => handleRepoSelect(repo)}
-                      className={`w-full text-left p-4 transition-colors ${
+                      disabled={isSubmitting}
+                      className={`w-full text-left p-4 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                         selectedRepo?.id === repo.id
                           ? 'bg-primary/10 border-l-4 border-l-primary'
                           : 'hover:bg-secondary/50'
@@ -215,8 +229,8 @@ export function GithubConnectModal({ isOpen, onClose, onSubmit }: GithubConnectM
                       setRepoPath(e.target.value)
                       setErrors(prev => ({ ...prev, path: undefined }))
                     }}
-                    placeholder="./contracts"
-                    className="w-full px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                    disabled={isSubmitting}
+                    className="w-full px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                   <p className="text-xs text-muted-foreground mt-1">
                     Path to your Solidity contracts directory
@@ -234,9 +248,10 @@ export function GithubConnectModal({ isOpen, onClose, onSubmit }: GithubConnectM
                     id="description"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
+                    disabled={isSubmitting}
                     placeholder="Brief description of your project..."
                     rows={3}
-                    className="w-full px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                    className="w-full px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary resize-none disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                 </div>
               </>
@@ -247,13 +262,14 @@ export function GithubConnectModal({ isOpen, onClose, onSubmit }: GithubConnectM
             <button
               type="button"
               onClick={handleClose}
-              className="flex-1 px-4 py-2 border border-border rounded-md hover:bg-secondary transition-colors"
+              disabled={isSubmitting}
+              className="flex-1 px-4 py-2 border border-border rounded-md hover:bg-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={!selectedRepo}
+              disabled={!selectedRepo || isSubmitting}
               className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Connect Repository

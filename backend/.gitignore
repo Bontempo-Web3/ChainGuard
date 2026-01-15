@@ -3,4 +3,5 @@ dist/
 .env
 *.log
 .DS_Store
-src/uploads/
+git-repos/
+uploads/

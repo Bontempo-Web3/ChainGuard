@@ -1,10 +1,12 @@
 import { Router } from 'express';
 import uploadRouter from './upload';
+import githubRouter from './github';
 
 const router = Router();
 
-// Mount upload route
+// Mount routes
 router.use('/', uploadRouter);
+router.use('/', githubRouter);
 
 // You can add more project routes here later:
 // router.get('/', getAllProjects);

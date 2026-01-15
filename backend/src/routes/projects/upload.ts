@@ -10,7 +10,7 @@ const router = Router();
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, '../../uploads');
+    const uploadDir = path.join(__dirname, '../../../uploads');
     
     // Create uploads directory if it doesn't exist
     if (!fs.existsSync(uploadDir)) {

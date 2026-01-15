@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { X, Upload, FileArchive } from 'lucide-react'
+import { X, Upload, FileArchive, Loader2 } from 'lucide-react'
 
 interface UploadProjectModalProps {
   isOpen: boolean
@@ -14,6 +14,7 @@ export function UploadProjectModal({ isOpen, onClose, onSubmit }: UploadProjectM
   const [description, setDescription] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [errors, setErrors] = useState<{ name?: string; file?: string }>({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   if (!isOpen) return null
@@ -48,8 +49,8 @@ export function UploadProjectModal({ isOpen, onClose, onSubmit }: UploadProjectM
       return
     }
     
+    setIsSubmitting(true)
     onSubmit({ name, description, file: file! })
-    handleClose()
   }
 
   const handleClose = () => {
@@ -57,6 +58,7 @@ export function UploadProjectModal({ isOpen, onClose, onSubmit }: UploadProjectM
     setDescription('')
     setFile(null)
     setErrors({})
+    setIsSubmitting(false)
     onClose()
   }
 
@@ -77,12 +79,22 @@ export function UploadProjectModal({ isOpen, onClose, onSubmit }: UploadProjectM
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-card border border-border rounded-lg w-full max-w-md p-6">
+      <div className="bg-card border border-border rounded-lg w-full max-w-md p-6 relative">
+        {isSubmitting && (
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-10 rounded-lg">
+            <div className="text-center">
+              <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">Uploading project...</p>
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-semibold">Upload Project</h2>
           <button
             onClick={handleClose}
-            className="text-muted-foreground hover:text-foreground transition-colors"
+            disabled={isSubmitting}
+            className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <X className="h-5 w-5" />
           </button>
@@ -167,13 +179,15 @@ export function UploadProjectModal({ isOpen, onClose, onSubmit }: UploadProjectM
             <button
               type="button"
               onClick={handleClose}
-              className="flex-1 px-4 py-2 border border-border rounded-md hover:bg-secondary transition-colors"
+              disabled={isSubmitting}
+              className="flex-1 px-4 py-2 border border-border rounded-md hover:bg-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+              disabled={isSubmitting}
+              className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Upload Project
             </button>
