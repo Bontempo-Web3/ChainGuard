@@ -73,12 +73,13 @@ router.post('/', async (req, res) => {
       
       console.log('Installing Foundry dependencies...');
       try {
-        await execAsync('forge install --no-commit', {
+        await execAsync('git submodule update --init --recursive', {
           cwd: contractsPath,
           maxBuffer: 10 * 1024 * 1024
         });
+        console.log('Dependencies installed successfully');
       } catch (installError: any) {
-        console.warn('Forge install warning:', installError.message);
+        console.warn('Dependency install warning:', installError.message);
       }
       
       let buildOutput: string;
