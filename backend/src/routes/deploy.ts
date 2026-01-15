@@ -72,8 +72,15 @@ router.post('/', async (req, res) => {
       console.log(`Compiling contracts at: ${contractsPath}`);
       
       console.log('Installing Foundry dependencies...');
+      const libDir = path.join(contractsPath, 'lib');
+      await fs.mkdir(libDir, { recursive: true });
+      
       try {
-        await execAsync('git submodule update --init --recursive', {
+        await execAsync('git clone https://github.com/foundry-rs/forge-std.git lib/forge-std', {
+          cwd: contractsPath,
+          maxBuffer: 10 * 1024 * 1024
+        });
+        await execAsync('git clone https://github.com/OpenZeppelin/openzeppelin-contracts.git lib/openzeppelin-contracts', {
           cwd: contractsPath,
           maxBuffer: 10 * 1024 * 1024
         });
