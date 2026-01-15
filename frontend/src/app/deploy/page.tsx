@@ -116,27 +116,74 @@ export default function DeployPage() {
       return
     }
 
-    if (!isConnected) {
+    if (!isConnected || !address) {
       alert('Please connect your wallet first')
       return
     }
 
     setDeploying(true)
-    // TODO: Implement actual deployment logic with ethers.js
-    // This will need to:
-    // 1. Compile the contract from the selected project
-    // 2. Deploy using the connected wallet
-    // 3. Save deployment info to database
-    setTimeout(() => {
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/deploy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          projectId: selectedProject.id,
+          network: selectedNetwork
+        })
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.details || error.error || 'Compilation failed')
+      }
+
+      const { bytecode, abi, contractName } = await response.json()
+
+      const { ethers } = await import('ethers')
+      const provider = new ethers.BrowserProvider(window.ethereum)
+      const signer = await provider.getSigner()
+
+      const factory = new ethers.ContractFactory(abi, bytecode, signer)
+      
+      const contract = await factory.deploy()
+      await contract.waitForDeployment()
+
+      const contractAddress = await contract.getAddress()
+      const deployTx = contract.deploymentTransaction()
+      const receipt = await deployTx?.wait()
+
+      const network = await provider.getNetwork()
+
+      await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/deploy/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          projectId: selectedProject.id,
+          contractAddress,
+          network: selectedNetwork,
+          chainId: network.chainId.toString(),
+          contractName,
+          transactionHash: receipt?.hash
+        })
+      })
+
       setDeployed({
-        address: '0x1234...5678',
+        address: contractAddress,
         network: selectedNetwork,
-        txHash: '0xabcd...efgh',
-        gasUsed: '1,234,567',
+        txHash: receipt?.hash || '',
+        gasUsed: receipt?.gasUsed.toString() || '0',
         projectName: selectedProject.projectName
       })
+
+    } catch (error: any) {
+      console.error('Deployment failed:', error)
+      alert(`Deployment failed: ${error.message}`)
+    } finally {
       setDeploying(false)
-    }, 3000)
+    }
   }
 
   if (loading) {
