@@ -3,6 +3,36 @@
 import { useEffect, useState } from 'react'
 import { Bell, ArrowUpRight, ArrowDownRight, AlertTriangle } from 'lucide-react'
 import { LandingPage } from '@/components/layout/LandingPage'
+import { ProjectSelector } from '@/components/monitor/ProjectSelector'
+
+interface Contract {
+  id: number
+  projectId: number
+  contractAddress: string
+  network: string
+  chainId: string
+  contractName: string
+  tokenDecimals: number | null
+  deploymentId: number | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+interface Project {
+  id: number
+  userId: number
+  projectName: string
+  description: string | null
+  projectType: 'github' | 'zip' | 'deployed'
+  githubRepoUrl: string | null
+  githubRepoPath: string | null
+  zipFilePath: string | null
+  scanApproved: boolean
+  isDeployed: boolean
+  createdAt: Date
+  updatedAt: Date
+  contracts: Contract[]
+}
 
 interface Event {
   id: string
@@ -27,12 +57,14 @@ type StreamMessage =
   | { kind: 'event'; event: Event }
   | { kind: 'ping' }
 
-export default function MonitorPage() {
+function MonitorPage() {
   const [events, setEvents] = useState<Event[]>([])
   const [connected, setConnected] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const [projects, setProjects] = useState<Project[]>([])
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null)
 
   const alertEvents = events.filter((e) => e.alert)
 
@@ -50,6 +82,8 @@ export default function MonitorPage() {
         const userData = await response.json()
         setUser(userData)
         setIsAuthenticated(true)
+        
+        await fetchProjects()
       } else {
         setIsAuthenticated(false)
       }
@@ -61,10 +95,43 @@ export default function MonitorPage() {
     }
   }
 
-  useEffect(() => {
-    if (!isAuthenticated) return
+  const fetchProjects = async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/projects`, {
+        credentials: 'include'
+      })
 
-    const es = new EventSource('/api/monitor/stream')
+      if (response.ok) {
+        const data = await response.json()
+        
+        // Filter only deployed projects (they already have contracts joined)
+        const deployedProjects = data.filter((p: Project) => p.isDeployed)
+        
+        setProjects(deployedProjects)
+        
+        // Auto-select first deployed project
+        if (deployedProjects.length > 0) {
+          setSelectedProject(deployedProjects[0])
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch projects:', error)
+    }
+  }
+
+  useEffect(() => {
+    if (!isAuthenticated || !selectedProject) return
+
+    // Clear events and reset connection status when switching projects
+    setEvents([])
+    setConnected(false)
+
+    // Connect to stream for selected project
+    const es = new EventSource(`/api/monitor/stream?projectId=${selectedProject.id}`)
+
+    es.onopen = () => {
+      setConnected(true)
+    }
 
     es.onmessage = (e) => {
       const msg: StreamMessage = JSON.parse(e.data)
@@ -78,10 +145,15 @@ export default function MonitorPage() {
       }
     }
 
-    es.onerror = () => setConnected(false)
+    es.onerror = () => {
+      setConnected(false)
+    }
 
-    return () => es.close()
-  }, [isAuthenticated])
+    return () => {
+      es.close()
+      setConnected(false)
+    }
+  }, [isAuthenticated, selectedProject])
 
   if (loading) {
     return (
@@ -94,6 +166,8 @@ export default function MonitorPage() {
   if (!isAuthenticated) {
     return <LandingPage />
   }
+
+  const deployedProjectsCount = projects.filter(p => p.isDeployed).length
 
   return (
     <div className="min-h-screen p-8">
@@ -118,6 +192,27 @@ export default function MonitorPage() {
           </div>
         </div>
 
+        <div className="flex items-center justify-between">
+          <ProjectSelector
+            projects={projects}
+            selectedProject={selectedProject}
+            onSelectProject={setSelectedProject}
+          />
+
+          {selectedProject && selectedProject.contracts[0] && (
+            <div className="flex items-center gap-4 text-sm">
+              <div className="text-muted-foreground">
+                <span className="font-medium text-foreground">Address:</span>{' '}
+                <code className="font-mono">{selectedProject.contracts[0].contractAddress}</code>
+              </div>
+              <div className="text-muted-foreground">
+                <span className="font-medium text-foreground">Network:</span>{' '}
+                {selectedProject.contracts[0].network.charAt(0).toUpperCase() + selectedProject.contracts[0].network.slice(1)}
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="grid grid-cols-3 gap-4">
           <div className="border rounded-lg p-4 bg-card">
             <div className="text-sm text-muted-foreground">Events Today</div>
@@ -135,7 +230,7 @@ export default function MonitorPage() {
             <div className="text-sm text-muted-foreground">
               Contracts Monitored
             </div>
-            <div className="text-3xl font-bold mt-1">1</div>
+            <div className="text-3xl font-bold mt-1">{deployedProjectsCount}</div>
           </div>
         </div>
 
@@ -190,7 +285,11 @@ export default function MonitorPage() {
           </div>
 
           <div className="divide-y">
-            {events.length === 0 ? (
+            {!selectedProject ? (
+              <div className="p-8 text-center text-muted-foreground">
+                Select a deployed project to view events
+              </div>
+            ) : events.length === 0 ? (
               <div className="p-8 text-center text-muted-foreground">
                 Waiting for events...
               </div>
@@ -234,3 +333,5 @@ export default function MonitorPage() {
     </div>
   )
 }
+
+export default MonitorPage
