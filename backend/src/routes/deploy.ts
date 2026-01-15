@@ -84,6 +84,18 @@ router.post('/', async (req, res) => {
           cwd: contractsPath,
           maxBuffer: 10 * 1024 * 1024
         });
+        
+        const foundryToml = `[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+remappings = [
+  "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+  "forge-std/=lib/forge-std/src/"
+]
+`;
+        await fs.writeFile(path.join(contractsPath, 'foundry.toml'), foundryToml);
+        
         console.log('Dependencies installed successfully');
       } catch (installError: any) {
         console.warn('Dependency install warning:', installError.message);
