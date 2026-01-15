@@ -13,6 +13,35 @@ interface User {
   email: string
 }
 
+interface Contract {
+  id: number
+  projectId: number
+  contractAddress: string
+  network: string
+  chainId: string
+  contractName: string
+  tokenDecimals: number | null
+  deploymentId: number | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+interface Project {
+  id: number
+  userId: number
+  projectName: string
+  description: string | null
+  projectType: 'github' | 'zip' | 'deployed'
+  githubRepoUrl: string | null
+  githubRepoPath: string | null
+  zipFilePath: string | null
+  scanApproved: boolean
+  isDeployed: boolean
+  createdAt: Date
+  updatedAt: Date
+  contracts: Contract[]
+}
+
 export default function DeployPage() {
   const { address, isConnected } = useAccount()
   const [deploying, setDeploying] = useState(false)
@@ -20,10 +49,19 @@ export default function DeployPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const [projects, setProjects] = useState<Project[]>([])
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null)
+  const [selectedNetwork, setSelectedNetwork] = useState('sepolia')
 
   useEffect(() => {
     checkAuth()
   }, [])
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchProjects()
+    }
+  }, [isAuthenticated])
 
   const checkAuth = async () => {
     try {
@@ -46,16 +84,56 @@ export default function DeployPage() {
     }
   }
 
+  const fetchProjects = async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/projects`, {
+        credentials: 'include'
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        // Filter only GitHub/ZIP projects (not deployed yet)
+        const deployableProjects = data.filter((p: Project) => 
+          (p.projectType === 'github' || p.projectType === 'zip') && 
+          !p.isDeployed
+        )
+        setProjects(deployableProjects)
+        
+        // Auto-select first project
+        if (deployableProjects.length > 0 && !selectedProject) {
+          setSelectedProject(deployableProjects[0])
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch projects:', error)
+    }
+  }
+
 
   const handleDeploy = async () => {
+    if (!selectedProject) {
+      alert('Please select a project to deploy')
+      return
+    }
+
+    if (!isConnected) {
+      alert('Please connect your wallet first')
+      return
+    }
+
     setDeploying(true)
-    // TODO: Implement deployment logic with ethers.js
+    // TODO: Implement actual deployment logic with ethers.js
+    // This will need to:
+    // 1. Compile the contract from the selected project
+    // 2. Deploy using the connected wallet
+    // 3. Save deployment info to database
     setTimeout(() => {
       setDeployed({
         address: '0x1234...5678',
-        network: 'Sepolia',
+        network: selectedNetwork,
         txHash: '0xabcd...efgh',
-        gasUsed: '1,234,567'
+        gasUsed: '1,234,567',
+        projectName: selectedProject.projectName
       })
       setDeploying(false)
     }, 3000)
@@ -84,41 +162,90 @@ export default function DeployPage() {
         </div>
 
         <div className="border border-border rounded-lg p-6 bg-card space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold">Wallet Connection</h2>
-              <p className="text-sm text-muted-foreground">Connect your wallet to deploy</p>
-            </div>
-            {isConnected ? (
-              <div className="flex items-center gap-2 text-green-500">
-                <CheckCircle className="h-5 w-5" />
-                <span>Connected: {address?.slice(0, 6)}...{address?.slice(-4)}</span>
-              </div>
+          <div>
+            <h3 className="text-lg font-medium mb-3">Select Project to Deploy</h3>
+            {projects.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No deployable projects found. Projects must be scanned and approved first.
+              </p>
             ) : (
-              <div className="flex items-center gap-2 text-yellow-500">
-                <AlertTriangle className="h-5 w-5" />
-                <span className="text-sm">Connect wallet in Sidebar to deploy</span>
+              <select
+                value={selectedProject?.id || ''}
+                onChange={(e) => {
+                  const project = projects.find(p => p.id === parseInt(e.target.value))
+                  setSelectedProject(project || null)
+                }}
+                className="w-full px-4 py-2 bg-secondary border border-border rounded-lg text-sm"
+              >
+                {projects.map(project => (
+                  <option key={project.id} value={project.id}>
+                    {project.projectName} ({project.projectType})
+                  </option>
+                ))}
+              </select>
+            )}
+            {selectedProject && (
+              <div className="mt-3 space-y-1">
+                <p className="text-xs text-muted-foreground">
+                  Type: {selectedProject.projectType.toUpperCase()}
+                </p>
+                {selectedProject.githubRepoUrl && (
+                  <p className="text-xs text-muted-foreground">
+                    Repository: {selectedProject.githubRepoUrl}
+                  </p>
+                )}
+                {selectedProject.description && (
+                  <p className="text-xs text-muted-foreground">
+                    {selectedProject.description}
+                  </p>
+                )}
               </div>
             )}
           </div>
 
           <div className="border-t border-border pt-6">
-            <h3 className="font-medium mb-4">Pre-deployment Checks</h3>
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <CheckCircle className="h-5 w-5 text-green-500" />
-                <span>Security scan passed (0 critical, 0 high)</span>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold">Wallet Connection</h2>
+                <p className="text-sm text-muted-foreground">Connect your wallet to deploy</p>
               </div>
-              <div className="flex items-center gap-3">
-                <CheckCircle className="h-5 w-5 text-green-500" />
-                <span>Contract compiled successfully</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="h-5 w-5 text-yellow-500" />
-                <span>3 medium severity warnings (review recommended)</span>
-              </div>
+              {isConnected ? (
+                <div className="flex items-center gap-2 text-green-500">
+                  <CheckCircle className="h-5 w-5" />
+                  <span>Connected: {address?.slice(0, 6)}...{address?.slice(-4)}</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-yellow-500">
+                  <AlertTriangle className="h-5 w-5" />
+                  <span className="text-sm">Connect wallet in Sidebar to deploy</span>
+                </div>
+              )}
             </div>
           </div>
+
+          {selectedProject && (
+            <div className="border-t border-border pt-6">
+              <h3 className="font-medium mb-4">Pre-deployment Checks</h3>
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  {selectedProject.scanApproved ? (
+                    <CheckCircle className="h-5 w-5 text-green-500" />
+                  ) : (
+                    <AlertTriangle className="h-5 w-5 text-yellow-500" />
+                  )}
+                  <span>
+                    {selectedProject.scanApproved 
+                      ? 'Security scan passed' 
+                      : 'Security scan pending'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <CheckCircle className="h-5 w-5 text-green-500" />
+                  <span>Project ready for deployment</span>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="border-t border-border pt-6">
             <div className="flex items-center justify-between mb-4">
@@ -126,19 +253,23 @@ export default function DeployPage() {
                 <h3 className="font-medium">Network</h3>
                 <p className="text-sm text-muted-foreground">Select deployment network</p>
               </div>
-              <select className="bg-secondary border border-border rounded-lg px-4 py-2">
-                <option>Sepolia (Testnet)</option>
-                <option>Ethereum Mainnet</option>
-                <option>Polygon</option>
-                <option>Arbitrum</option>
-                <option>Base</option>
+              <select 
+                value={selectedNetwork}
+                onChange={(e) => setSelectedNetwork(e.target.value)}
+                className="bg-secondary border border-border rounded-lg px-4 py-2"
+              >
+                <option value="sepolia">Sepolia (Testnet)</option>
+                <option value="ethereum">Ethereum Mainnet</option>
+                <option value="polygon">Polygon</option>
+                <option value="arbitrum">Arbitrum</option>
+                <option value="base">Base</option>
               </select>
             </div>
           </div>
 
           <button
             onClick={handleDeploy}
-            disabled={!isConnected || deploying}
+            disabled={!isConnected || deploying || !selectedProject}
             className="w-full py-3 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 disabled:opacity-50"
           >
             {deploying ? 'Deploying...' : 'Deploy Contract'}
