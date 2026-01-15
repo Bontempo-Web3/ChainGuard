@@ -61,7 +61,20 @@ router.post('/', async (req, res) => {
       
       if (project.project_type === 'github' && project.github_repo_url) {
         console.log(`Cloning repository: ${project.github_repo_url}`);
-        await execAsync(`git clone ${project.github_repo_url} ${tempDir}`);
+        // Clone main branch with --recursive to get submodules (dependencies)
+        await execAsync(`git clone --recursive -b main ${project.github_repo_url} ${tempDir}`, {
+          maxBuffer: 50 * 1024 * 1024
+        });
+        // Ensure submodules are fully initialized
+        try {
+          await execAsync('git submodule update --init --recursive', {
+            cwd: tempDir,
+            maxBuffer: 50 * 1024 * 1024
+          });
+          console.log('Submodules initialized');
+        } catch (e) {
+          console.log('No submodules or submodule init failed');
+        }
         projectRoot = tempDir;
         contractsPath = path.join(tempDir, project.github_repo_path || 'src');
       } else if (project.project_type === 'zip' && project.zip_file_path) {
@@ -76,44 +89,101 @@ router.post('/', async (req, res) => {
       console.log(`Project root: ${projectRoot}`);
       console.log(`Contracts path: ${contractsPath}`);
       
-      console.log('Installing Foundry dependencies...');
+      // Check if project has lib/ directory with dependencies
       const libDir = path.join(projectRoot, 'lib');
-      await fs.mkdir(libDir, { recursive: true });
-      
+      let hasLib = false;
       try {
-        await execAsync('git clone --depth 1 https://github.com/foundry-rs/forge-std.git lib/forge-std', {
-          cwd: projectRoot,
-          maxBuffer: 10 * 1024 * 1024
-        });
-        await execAsync('git clone --depth 1 --branch v4.9.0 https://github.com/OpenZeppelin/openzeppelin-contracts.git lib/openzeppelin-contracts', {
-          cwd: projectRoot,
-          maxBuffer: 10 * 1024 * 1024
-        });
-        
-        const foundryToml = `[profile.default]
-src = "src"
-out = "out"
-libs = ["lib"]
-optimizer = true
-optimizer_runs = 200
-remappings = [
-  "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
-  "forge-std/=lib/forge-std/src/"
-]
-`;
-        await fs.writeFile(path.join(projectRoot, 'foundry.toml'), foundryToml);
-        console.log('Created foundry.toml with remappings');
-        
-        console.log('Dependencies installed successfully');
-      } catch (installError: any) {
-        console.warn('Dependency install warning:', installError.message);
+        const libContents = await fs.readdir(libDir);
+        hasLib = libContents.length > 0;
+        console.log('Existing lib/ contents:', libContents);
+      } catch (e) {
+        console.log('No lib/ directory found');
       }
       
+      // If no dependencies, try to install them
+      if (!hasLib) {
+        console.log('Installing Foundry dependencies...');
+        await fs.mkdir(libDir, { recursive: true });
+        
+        // Try forge install first (reads from foundry.toml if configured)
+        try {
+          await execAsync('forge install', {
+            cwd: projectRoot,
+            maxBuffer: 10 * 1024 * 1024
+          });
+          console.log('forge install completed');
+        } catch (e) {
+          console.log('forge install failed');
+        }
+        
+        // Verify if lib/ was actually populated
+        let libPopulated = false;
+        try {
+          const libContents = await fs.readdir(libDir);
+          libPopulated = libContents.length > 0;
+          console.log('After forge install, lib/ contents:', libContents);
+        } catch (e) {
+          // lib/ doesn't exist
+        }
+        
+        // If still empty, install common dependencies using git clone
+        if (!libPopulated) {
+          console.log('lib/ still empty, cloning dependencies directly');
+          
+          try {
+            await execAsync('git clone --depth 1 https://github.com/foundry-rs/forge-std.git lib/forge-std', {
+              cwd: projectRoot,
+              maxBuffer: 10 * 1024 * 1024
+            });
+            console.log('Cloned forge-std');
+          } catch (e: any) {
+            console.error('forge-std clone error:', e.stderr || e.message);
+          }
+          
+          try {
+            // Use v4.9.6 for compatibility with most Foundry projects (v5.x removed safeApprove)
+            await execAsync('git clone --depth 1 --branch v4.9.6 https://github.com/OpenZeppelin/openzeppelin-contracts.git lib/openzeppelin-contracts', {
+              cwd: projectRoot,
+              maxBuffer: 10 * 1024 * 1024
+            });
+            console.log('Cloned openzeppelin-contracts v4.9.6');
+          } catch (e: any) {
+            console.error('openzeppelin clone error:', e.stderr || e.message);
+          }
+          
+          // Final check of lib contents
+          try {
+            const finalLibContents = await fs.readdir(libDir);
+            console.log('Final lib/ contents:', finalLibContents);
+            
+            // Create remappings.txt if dependencies were installed
+            if (finalLibContents.length > 0) {
+              const remappings: string[] = [];
+              if (finalLibContents.includes('forge-std')) {
+                remappings.push('forge-std/=lib/forge-std/src/');
+              }
+              if (finalLibContents.includes('openzeppelin-contracts')) {
+                // Map v5.x paths to v4.x paths for common differences
+                remappings.push('@openzeppelin/contracts/utils/ReentrancyGuard.sol=lib/openzeppelin-contracts/contracts/security/ReentrancyGuard.sol');
+                remappings.push('@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/');
+              }
+              if (remappings.length > 0) {
+                await fs.writeFile(path.join(projectRoot, 'remappings.txt'), remappings.join('\n'));
+                console.log('Created remappings.txt');
+              }
+            }
+          } catch (e) {
+            console.error('lib/ still does not exist');
+          }
+        }
+      }
+      
+      // Try to compile
       let buildOutput: string;
       try {
         const result = await execAsync('forge build', {
           cwd: projectRoot,
-          maxBuffer: 10 * 1024 * 1024
+          maxBuffer: 50 * 1024 * 1024
         });
         buildOutput = result.stdout;
         console.log('Forge build output:', buildOutput);
