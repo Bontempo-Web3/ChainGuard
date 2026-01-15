@@ -34,8 +34,17 @@ router.post('/', async (req, res) => {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    if (project.userId !== userId) {
-      return res.status(403).json({ error: 'Not authorized to deploy this project' });
+    console.log('Deploy authorization check:', {
+      sessionUserId: userId,
+      projectUserId: project.user_id,
+      projectId: project.id
+    });
+
+    if (project.user_id !== userId) {
+      return res.status(403).json({ 
+        error: 'Not authorized to deploy this project',
+        debug: { sessionUserId: userId, projectUserId: project.user_id }
+      });
     }
 
     if (project.projectType !== 'github' && project.projectType !== 'zip') {
@@ -134,7 +143,7 @@ router.post('/save', async (req, res) => {
 
     const project = await ProjectRepository.findById(projectId);
     
-    if (!project || project.userId !== userId) {
+    if (!project || project.user_id !== userId) {
       return res.status(403).json({ error: 'Not authorized' });
     }
 
