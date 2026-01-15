@@ -155,23 +155,36 @@ export default function Home() {
     chainId: string
     tokenDecimals?: string
   }) => {
-    console.log('Adding contract to monitor:', data)
-    
-    // TODO: Implement API call to create project
-    // const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/projects`, {
-    //   method: 'POST',
-    //   credentials: 'include',
-    //   headers: {
-    //     'Content-Type': 'application/json',
-    //   },
-    //   body: JSON.stringify({
-    //     project_name: data.contractName,
-    //     description: `Monitoring ${data.contractName} on ${data.network}`,
-    //     project_type: 'deployed',
-    //     // Additional monitoring config could be stored in a separate table
-    //     // or as JSON in the description/metadata field
-    //   })
-    // })
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/projects/monitor`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contractName: data.contractName,
+          contractAddress: data.contractAddress,
+          network: data.network,
+          chainId: data.chainId,
+          tokenDecimals: data.tokenDecimals
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to add contract to monitoring')
+      }
+
+      const result = await response.json()
+      console.log('Contract added successfully:', result)
+
+      // Reload the page to show the new project
+      window.location.reload()
+    } catch (error: any) {
+      console.error('Monitor contract error:', error)
+      alert(`Failed to add contract: ${error.message}`)
+    }
   }
 
   const formatTime = (timestamp: number) => {

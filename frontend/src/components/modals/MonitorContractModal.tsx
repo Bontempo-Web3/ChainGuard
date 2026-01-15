@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Activity } from 'lucide-react'
+import { X, Activity, Loader2 } from 'lucide-react'
 
 interface MonitorContractModalProps {
   isOpen: boolean
@@ -43,6 +43,7 @@ export function MonitorContractModal({ isOpen, onClose, onSubmit }: MonitorContr
     network?: string
     tokenDecimals?: string
   }>({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   if (!isOpen) return null
 
@@ -92,6 +93,7 @@ export function MonitorContractModal({ isOpen, onClose, onSubmit }: MonitorContr
       return
     }
 
+    setIsSubmitting(true)
     onSubmit({
       contractName,
       contractAddress,
@@ -99,7 +101,6 @@ export function MonitorContractModal({ isOpen, onClose, onSubmit }: MonitorContr
       chainId,
       tokenDecimals: tokenDecimals || undefined
     })
-    handleClose()
   }
 
   const handleClose = () => {
@@ -109,12 +110,22 @@ export function MonitorContractModal({ isOpen, onClose, onSubmit }: MonitorContr
     setChainId('11155111')
     setTokenDecimals('')
     setErrors({})
+    setIsSubmitting(false)
     onClose()
   }
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-card border border-border rounded-lg w-full max-w-md">
+      <div className="bg-card border border-border rounded-lg w-full max-w-md relative">
+        {isSubmitting && (
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-10 rounded-lg">
+            <div className="text-center">
+              <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">Adding contract to monitoring...</p>
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center justify-between p-6 border-b border-border">
           <div>
             <h2 className="text-xl font-semibold flex items-center gap-2">
@@ -127,7 +138,8 @@ export function MonitorContractModal({ isOpen, onClose, onSubmit }: MonitorContr
           </div>
           <button
             onClick={handleClose}
-            className="text-muted-foreground hover:text-foreground transition-colors"
+            disabled={isSubmitting}
+            className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <X className="h-5 w-5" />
           </button>
@@ -146,8 +158,9 @@ export function MonitorContractModal({ isOpen, onClose, onSubmit }: MonitorContr
                 setContractName(e.target.value)
                 setErrors(prev => ({ ...prev, contractName: undefined }))
               }}
+              disabled={isSubmitting}
               placeholder="Enter contract name"
-              className="w-full px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
             />
             {errors.contractName && (
               <p className="text-red-500 text-sm mt-1">{errors.contractName}</p>
@@ -166,8 +179,9 @@ export function MonitorContractModal({ isOpen, onClose, onSubmit }: MonitorContr
                 setContractAddress(e.target.value)
                 setErrors(prev => ({ ...prev, contractAddress: undefined }))
               }}
+              disabled={isSubmitting}
               placeholder="0x..."
-              className="w-full px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary font-mono text-sm"
+              className="w-full px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             />
             {errors.contractAddress && (
               <p className="text-red-500 text-sm mt-1">{errors.contractAddress}</p>
@@ -182,7 +196,8 @@ export function MonitorContractModal({ isOpen, onClose, onSubmit }: MonitorContr
               id="network"
               onChange={handleNetworkChange}
               defaultValue="Sepolia"
-              className="w-full px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+              disabled={isSubmitting}
+              className="w-full px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {NETWORKS.map((net) => (
                 <option key={net.chainId} value={net.name}>
@@ -212,8 +227,9 @@ export function MonitorContractModal({ isOpen, onClose, onSubmit }: MonitorContr
                 setTokenDecimals(e.target.value)
                 setErrors(prev => ({ ...prev, tokenDecimals: undefined }))
               }}
+              disabled={isSubmitting}
               placeholder="18"
-              className="w-full px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
             />
             {errors.tokenDecimals && (
               <p className="text-red-500 text-sm mt-1">{errors.tokenDecimals}</p>
@@ -227,13 +243,15 @@ export function MonitorContractModal({ isOpen, onClose, onSubmit }: MonitorContr
             <button
               type="button"
               onClick={handleClose}
-              className="flex-1 px-4 py-2 border border-border rounded-md hover:bg-secondary transition-colors"
+              disabled={isSubmitting}
+              className="flex-1 px-4 py-2 border border-border rounded-md hover:bg-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+              disabled={isSubmitting}
+              className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Add Contract
             </button>
