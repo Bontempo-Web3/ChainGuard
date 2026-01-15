@@ -385,31 +385,28 @@ class ScannerOrchestrator:
                 final_test_code = result["test_code"]
                 fix_attempted = False
                 
-                # Run fixer if: any failures OR no passing tests (compilation error)
-                needs_fix = test_results.get("failed", 0) > 0 or test_results.get("passed", 0) == 0
+                # ALWAYS run fixer to clean up any issues (depth errors, etc)
+                logger.info(f"Running test fixer (passed={test_results.get('passed', 0)}, failed={test_results.get('failed', 0)})...")
                 
-                if needs_fix:
-                    logger.info(f"Tests need fixing (passed={test_results.get('passed', 0)}, failed={test_results.get('failed', 0)}), attempting fix...")
+                fix_result = await self.claude.fix_failing_tests(
+                    test_code=result["test_code"],
+                    test_output=test_results.get("output", ""),
+                    contract_name=contract_name
+                )
+                
+                if fix_result.get("status") == "success":
+                    fix_attempted = True
+                    final_test_code = fix_result["test_code"]
                     
-                    fix_result = await self.claude.fix_failing_tests(
-                        test_code=result["test_code"],
-                        test_output=test_results.get("output", ""),
-                        contract_name=contract_name
-                    )
+                    # Write fixed test file
+                    with open(isolated_test_file, 'w', encoding='utf-8') as f:
+                        f.write(final_test_code)
                     
-                    if fix_result.get("status") == "success":
-                        fix_attempted = True
-                        final_test_code = fix_result["test_code"]
-                        
-                        # Write fixed test file
-                        with open(isolated_test_file, 'w', encoding='utf-8') as f:
-                            f.write(final_test_code)
-                        
-                        logger.info("Fixed test file written, re-running tests...")
-                        
-                        # Re-run tests with fixed code
-                        test_results = await self._run_forge_tests(isolated_test_dir, isolated_test_file)
-                        test_results["fix_attempted"] = True
+                    logger.info("Fixed test file written, re-running tests...")
+                    
+                    # Re-run tests with fixed code
+                    test_results = await self._run_forge_tests(isolated_test_dir, isolated_test_file)
+                    test_results["fix_attempted"] = True
                 
             finally:
                 # Cleanup isolated test directory

@@ -12,6 +12,21 @@ interface User {
   email: string
 }
 
+interface Project {
+  id: number
+  userId: number
+  projectName: string
+  description: string | null
+  projectType: 'github' | 'zip' | 'deployed'
+  githubRepoUrl: string | null
+  githubRepoPath: string | null
+  zipFilePath: string | null
+  scanApproved: boolean
+  isDeployed: boolean
+  createdAt: Date
+  updatedAt: Date
+}
+
 interface BusinessRule {
   id: string
   category: string
@@ -56,6 +71,8 @@ export default function ScanPage() {
   const [selectedRules, setSelectedRules] = useState<Set<string>>(new Set())
   const [generatingTests, setGeneratingTests] = useState(false)
   const [testGenResult, setTestGenResult] = useState<any>(null)
+  const [projects, setProjects] = useState<Project[]>([])
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null)
 
   const handleGenerateTests = async () => {
     if (!results?.business_rules?.rules || selectedRules.size === 0) return
@@ -64,15 +81,25 @@ export default function ScanPage() {
     setTestGenResult(null)
     
     try {
+      if (!selectedProject) {
+        throw new Error('No project selected')
+      }
+
       const selectedRulesList = results.business_rules.rules.filter(r => selectedRules.has(r.id))
+      
+      const repository = selectedProject.projectType === 'github' 
+        ? selectedProject.githubRepoUrl 
+        : selectedProject.zipFilePath
       
       const response = await fetch('/api/generate-tests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          repository: mockProject.repository,
-          commit: mockProject.commit,
+          projectId: selectedProject.id,
+          repository: repository,
+          commit: 'main',
           branch: 'main',
+          repoPath: selectedProject.githubRepoPath || '.',
           selected_rules: selectedRulesList,
         }),
       })
@@ -131,24 +158,39 @@ export default function ScanPage() {
     return labels[category] || category
   }
 
-  // TODO: Replace mock with real data from PostgreSQL
-  // When PostgreSQL is implemented:
-  // 1. Fetch user's project list from database
-  // 2. Allow user to select project from list
-  // 3. Use repository and commit from selected project
-  // 4. Save scan results to database (scans table)
-  // 5. Link scan to project (project_id) and user (user_id)
-  const mockProject = {
-    id: process.env.NEXT_PUBLIC_MOCK_PROJECT_ID || '1',
-    name: process.env.NEXT_PUBLIC_MOCK_PROJECT_NAME || 'GridTradingBot',
-    repository: process.env.NEXT_PUBLIC_MOCK_PROJECT_GITHUB_URL || 'https://github.com/MariliaBontempo/GridTradingBot',
-    commit: process.env.NEXT_PUBLIC_MOCK_PROJECT_COMMIT || 'main',
-    type: process.env.NEXT_PUBLIC_MOCK_PROJECT_TYPE || 'github',
+  const fetchProjects = async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/projects`, {
+        credentials: 'include'
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        // Filter only GitHub and ZIP projects (not deployed-only)
+        const scannableProjects = data.filter((p: Project) => 
+          p.projectType === 'github' || p.projectType === 'zip'
+        )
+        setProjects(scannableProjects)
+        
+        // Auto-select first project
+        if (scannableProjects.length > 0 && !selectedProject) {
+          setSelectedProject(scannableProjects[0])
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch projects:', error)
+    }
   }
 
   useEffect(() => {
     checkAuth()
   }, [])
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchProjects()
+    }
+  }, [isAuthenticated])
 
   const checkAuth = async () => {
     try {
@@ -182,9 +224,19 @@ export default function ScanPage() {
         setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`])
       }
 
-      addLog(`Starting scan for: ${mockProject.name}`)
-      addLog(`Repository: ${mockProject.repository}`)
-      addLog(`Commit: ${mockProject.commit}`)
+      if (!selectedProject) {
+        throw new Error('No project selected')
+      }
+
+      const repository = selectedProject.projectType === 'github' 
+        ? selectedProject.githubRepoUrl 
+        : selectedProject.zipFilePath
+      
+      const repoPath = selectedProject.githubRepoPath || '.'
+
+      addLog(`Starting scan for: ${selectedProject.projectName}`)
+      addLog(`Repository: ${repository}`)
+      addLog(`Path: ${repoPath}`)
 
       addLog('Sending scan request to backend...')
       
@@ -194,10 +246,12 @@ export default function ScanPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          repository: mockProject.repository,
-          commit: mockProject.commit,
+          projectId: selectedProject.id,
+          repository: repository,
+          commit: 'main',
           branch: 'main',
-          projectName: mockProject.name,
+          repoPath: repoPath,
+          projectName: selectedProject.projectName,
         }),
       })
 
@@ -264,17 +318,45 @@ export default function ScanPage() {
         <div className="border border-border rounded-lg p-8 bg-card">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-medium">Mock Project</h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {mockProject.name} ({mockProject.type})
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Repository: {mockProject.repository}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Commit: {mockProject.commit}
-                </p>
+              <div className="flex-1">
+                <h3 className="text-lg font-medium mb-3">Select Project to Scan</h3>
+                {projects.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No scannable projects found. Add a GitHub or ZIP project first.
+                  </p>
+                ) : (
+                  <select
+                    value={selectedProject?.id || ''}
+                    onChange={(e) => {
+                      const project = projects.find(p => p.id === parseInt(e.target.value))
+                      setSelectedProject(project || null)
+                    }}
+                    className="w-full px-4 py-2 bg-secondary border border-border rounded-lg text-sm"
+                  >
+                    {projects.map(project => (
+                      <option key={project.id} value={project.id}>
+                        {project.projectName} ({project.projectType})
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {selectedProject && (
+                  <div className="mt-3 space-y-1">
+                    <p className="text-xs text-muted-foreground">
+                      Type: {selectedProject.projectType.toUpperCase()}
+                    </p>
+                    {selectedProject.githubRepoUrl && (
+                      <p className="text-xs text-muted-foreground">
+                        Repository: {selectedProject.githubRepoUrl}
+                      </p>
+                    )}
+                    {selectedProject.githubRepoPath && (
+                      <p className="text-xs text-muted-foreground">
+                        Path: {selectedProject.githubRepoPath}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
               <Shield className="h-12 w-12 text-primary" />
             </div>
@@ -295,7 +377,7 @@ export default function ScanPage() {
 
               <button
                 onClick={handleScan}
-                disabled={scanning}
+                disabled={scanning || !selectedProject}
                 className="w-full px-6 py-3 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {scanning ? (
