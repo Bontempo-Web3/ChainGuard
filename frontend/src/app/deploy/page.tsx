@@ -51,7 +51,7 @@ export default function DeployPage() {
   const [loading, setLoading] = useState(true)
   const [projects, setProjects] = useState<Project[]>([])
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
-  const [selectedNetwork, setSelectedNetwork] = useState('sepolia')
+  const [selectedNetwork, setSelectedNetwork] = useState('arbitrum-sepolia')
 
   useEffect(() => {
     checkAuth()
@@ -259,9 +259,10 @@ export default function DeployPage() {
                 className="bg-secondary border border-border rounded-lg px-4 py-2"
               >
                 <option value="sepolia">Sepolia (Testnet)</option>
+                <option value="arbitrum-sepolia">Arbitrum Sepolia (Testnet)</option>
                 <option value="ethereum">Ethereum Mainnet</option>
+                <option value="arbitrum">Arbitrum Mainnet</option>
                 <option value="polygon">Polygon</option>
-                <option value="arbitrum">Arbitrum</option>
                 <option value="base">Base</option>
               </select>
             </div>
