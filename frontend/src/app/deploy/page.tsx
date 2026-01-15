@@ -184,30 +184,123 @@ export default function DeployPage() {
       const constructorAbi = abi.find((item: any) => item.type === 'constructor')
       const constructorInputs = constructorAbi?.inputs || []
       
-      if (constructorInputs.length > 0 && constructorArgs.length === 0) {
-        // Need constructor arguments - show form
+      console.log('Constructor inputs:', constructorInputs)
+      console.log('Current constructor args:', constructorArgs)
+      
+      // Check if we have valid (non-empty) constructor arguments
+      const hasValidArgs = constructorArgs.length > 0 && constructorArgs.every(arg => arg && arg.trim() !== '')
+      console.log('Has valid args:', hasValidArgs)
+      
+      if (constructorInputs.length > 0 && !hasValidArgs) {
+        // Need constructor arguments - show form with auto-filled known addresses
+        console.log('Showing constructor form')
         setContractAbi(abi)
         setShowConstructorForm(true)
-        setConstructorArgs(new Array(constructorInputs.length).fill(''))
+        
+        // Known addresses by network
+        const knownAddresses: Record<string, Record<string, string>> = {
+          'arbitrum-sepolia': {
+            // Uniswap V3 not on Arb Sepolia - using WETH for testing
+            'swapRouter': '0x980B62Da83eFf3D4576C647993b0c1D7faf17c73',
+            'factory': '0x980B62Da83eFf3D4576C647993b0c1D7faf17c73',
+            'router': '0x980B62Da83eFf3D4576C647993b0c1D7faf17c73',
+          },
+          'arbitrum': {
+            'swapRouter': '0xE592427A0AEce92De3Edee1F18E0157C05861564',
+            'factory': '0x1F98431c8aD98523631AE4a59f267346ea31F984',
+            'router': '0xE592427A0AEce92De3Edee1F18E0157C05861564',
+          },
+          'ethereum': {
+            'swapRouter': '0xE592427A0AEce92De3Edee1F18E0157C05861564',
+            'factory': '0x1F98431c8aD98523631AE4a59f267346ea31F984',
+            'router': '0xE592427A0AEce92De3Edee1F18E0157C05861564',
+          },
+          'sepolia': {
+            'swapRouter': '0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E',
+            'factory': '0x0227628f3F023bb0B980b67D528571c95c6DaC1c',
+            'router': '0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E',
+          },
+          'polygon': {
+            'swapRouter': '0xE592427A0AEce92De3Edee1F18E0157C05861564',
+            'factory': '0x1F98431c8aD98523631AE4a59f267346ea31F984',
+            'router': '0xE592427A0AEce92De3Edee1F18E0157C05861564',
+          },
+          'base': {
+            'swapRouter': '0x2626664c2603336E57B271c5C0b26F421741e481',
+            'factory': '0x33128a8fC17869897dcE68Ed026d694621f6FDfD',
+            'router': '0x2626664c2603336E57B271c5C0b26F421741e481',
+          },
+        }
+        
+        // Auto-fill known addresses based on arg name
+        const networkAddresses = knownAddresses[selectedNetwork] || {}
+        const autoFilledArgs = constructorInputs.map((input: any) => {
+          const name = input.name.toLowerCase()
+          if (name.includes('router') || name.includes('swaprouter')) {
+            return networkAddresses['swapRouter'] || ''
+          }
+          if (name.includes('factory')) {
+            return networkAddresses['factory'] || ''
+          }
+          return ''
+        })
+        
+        setConstructorArgs(autoFilledArgs)
         setDeploying(false)
         return
       }
+
+      console.log('Deploying with args:', constructorArgs)
+      console.log('Arg values:', JSON.stringify(constructorArgs))
 
       const { ethers } = await import('ethers')
       const provider = new ethers.BrowserProvider(window.ethereum)
       const signer = await provider.getSigner()
 
-      const factory = new ethers.ContractFactory(abi, bytecode, signer)
+      // Validate addresses before deployment
+      console.log('Raw constructorArgs from state:', constructorArgs)
       
-      // Deploy with constructor arguments if any
-      const contract = constructorArgs.length > 0 
-        ? await factory.deploy(...constructorArgs)
-        : await factory.deploy()
-      await contract.waitForDeployment()
+      const validatedArgs = constructorArgs.map((arg, i) => {
+        console.log(`Arg ${i} raw value:`, arg, 'type:', typeof arg)
+        if (ethers.isAddress(arg)) {
+          console.log(`Arg ${i} is valid address:`, arg)
+          return arg
+        }
+        console.log(`Arg ${i} is NOT a valid address:`, arg)
+        return arg
+      })
 
-      const contractAddress = await contract.getAddress()
-      const deployTx = contract.deploymentTransaction()
-      const receipt = await deployTx?.wait()
+      // Build deployment data manually
+      const iface = new ethers.Interface(abi)
+      const encodedArgs = iface.encodeDeploy(validatedArgs)
+      console.log('Encoded constructor args:', encodedArgs)
+      
+      // Combine bytecode + constructor args
+      const deployData = bytecode + encodedArgs.slice(2) // remove 0x from args
+      console.log('Deploy data length:', deployData.length)
+      
+      // Get current nonce
+      const nonce = await provider.getTransactionCount(await signer.getAddress())
+      console.log('Current nonce:', nonce)
+      
+      // Send transaction directly via MetaMask with explicit gas
+      const txHash = await window.ethereum.request({
+        method: 'eth_sendTransaction',
+        params: [{
+          from: await signer.getAddress(),
+          data: deployData,
+          gas: '0x4C4B40', // 5,000,000 gas
+          nonce: '0x' + nonce.toString(16)
+        }]
+      })
+      
+      console.log('Transaction hash:', txHash)
+      
+      // Wait for receipt
+      const receipt = await provider.waitForTransaction(txHash)
+      console.log('Receipt:', receipt)
+      
+      const contractAddress = receipt?.contractAddress
 
       const network = await provider.getNetwork()
 
@@ -220,18 +313,23 @@ export default function DeployPage() {
           contractAddress,
           network: selectedNetwork,
           chainId: network.chainId.toString(),
-          contractName,
-          transactionHash: receipt?.hash
+          contractName: selectedProject.projectName,
+          transactionHash: txHash
         })
       })
 
       setDeployed({
-        address: contractAddress,
+        address: contractAddress || '',
         network: selectedNetwork,
-        txHash: receipt?.hash || '',
-        gasUsed: receipt?.gasUsed.toString() || '0',
+        txHash: txHash || '',
+        gasUsed: receipt?.gasUsed?.toString() || '0',
         projectName: selectedProject.projectName
       })
+
+      // Reset constructor args after successful deployment
+      setConstructorArgs([])
+      setShowConstructorForm(false)
+      setContractAbi([])
 
     } catch (error: any) {
       console.error('Deployment failed:', error)
@@ -276,6 +374,10 @@ export default function DeployPage() {
                 onChange={(e) => {
                   const project = projects.find(p => p.id === parseInt(e.target.value))
                   setSelectedProject(project || null)
+                  // Reset constructor args when changing project
+                  setConstructorArgs([])
+                  setShowConstructorForm(false)
+                  setContractAbi([])
                 }}
                 className="w-full px-4 py-2 bg-secondary border border-border rounded-lg text-sm"
               >
