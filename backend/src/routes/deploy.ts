@@ -47,7 +47,7 @@ router.post('/', async (req, res) => {
       });
     }
 
-    if (project.projectType !== 'github' && project.projectType !== 'zip') {
+    if (project.project_type !== 'github' && project.project_type !== 'zip') {
       return res.status(400).json({ error: 'Only GitHub and ZIP projects can be deployed' });
     }
 
@@ -57,13 +57,13 @@ router.post('/', async (req, res) => {
     try {
       let contractsPath: string;
 
-      if (project.projectType === 'github' && project.githubRepoUrl) {
-        console.log(`Cloning repository: ${project.githubRepoUrl}`);
-        await execAsync(`git clone ${project.githubRepoUrl} ${tempDir}`);
-        contractsPath = path.join(tempDir, project.githubRepoPath || '.');
-      } else if (project.projectType === 'zip' && project.zipFilePath) {
-        console.log(`Extracting ZIP: ${project.zipFilePath}`);
-        await execAsync(`unzip -q ${project.zipFilePath} -d ${tempDir}`);
+      if (project.project_type === 'github' && project.github_repo_url) {
+        console.log(`Cloning repository: ${project.github_repo_url}`);
+        await execAsync(`git clone ${project.github_repo_url} ${tempDir}`);
+        contractsPath = path.join(tempDir, project.github_repo_path || '.');
+      } else if (project.project_type === 'zip' && project.zip_file_path) {
+        console.log(`Extracting ZIP: ${project.zip_file_path}`);
+        await execAsync(`unzip -q ${project.zip_file_path} -d ${tempDir}`);
         contractsPath = tempDir;
       } else {
         throw new Error('Invalid project configuration');
