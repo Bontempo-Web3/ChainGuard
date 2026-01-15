@@ -7,6 +7,7 @@ import { LandingPage } from '@/components/layout/LandingPage'
 import { UploadProjectModal } from '@/components/modals/UploadProjectModal'
 import { GithubConnectModal } from '@/components/modals/GithubConnectModal'
 import { MonitorContractModal } from '@/components/modals/MonitorContractModal'
+import { DeleteConfirmModal } from '@/components/modals/DeleteConfirmModal'
 
 interface Contract {
   id: number
@@ -53,6 +54,8 @@ export default function Home() {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false)
   const [isGithubModalOpen, setIsGithubModalOpen] = useState(false)
   const [isMonitorModalOpen, setIsMonitorModalOpen] = useState(false)
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+  const [projectToDelete, setProjectToDelete] = useState<{ id: number; name: string } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -95,6 +98,37 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Failed to fetch projects:', error)
+    }
+  }
+
+  const handleDeleteProject = async (projectId: number, projectName: string) => {
+    setProjectToDelete({ id: projectId, name: projectName })
+    setIsDeleteModalOpen(true)
+  }
+
+  const confirmDelete = async () => {
+    if (!projectToDelete) return
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/projects/${projectToDelete.id}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to delete project')
+      }
+
+      // Remove project from state
+      setProjects(prev => prev.filter(p => p.id !== projectToDelete.id))
+      
+      console.log('Project deleted successfully')
+    } catch (error: any) {
+      console.error('Delete error:', error)
+      alert(`Failed to delete project: ${error.message}`)
+    } finally {
+      setProjectToDelete(null)
     }
   }
 
@@ -396,6 +430,7 @@ export default function Home() {
                             <Edit2 className="h-4 w-4 text-muted-foreground hover:text-foreground" />
                           </button>
                           <button
+                            onClick={() => handleDeleteProject(project.id, project.projectName)}
                             className="p-1.5 hover:bg-secondary rounded transition-colors"
                             title="Delete project"
                           >
@@ -428,6 +463,16 @@ export default function Home() {
         isOpen={isMonitorModalOpen}
         onClose={() => setIsMonitorModalOpen(false)}
         onSubmit={handleMonitorSubmit}
+      />
+
+      <DeleteConfirmModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => {
+          setIsDeleteModalOpen(false)
+          setProjectToDelete(null)
+        }}
+        onConfirm={confirmDelete}
+        projectName={projectToDelete?.name || ''}
       />
     </div>
   )
