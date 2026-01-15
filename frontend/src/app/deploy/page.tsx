@@ -52,6 +52,9 @@ export default function DeployPage() {
   const [projects, setProjects] = useState<Project[]>([])
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
   const [selectedNetwork, setSelectedNetwork] = useState('arbitrum-sepolia')
+  const [constructorArgs, setConstructorArgs] = useState<string[]>([])
+  const [showConstructorForm, setShowConstructorForm] = useState(false)
+  const [contractAbi, setContractAbi] = useState<any[]>([])
 
   useEffect(() => {
     checkAuth()
@@ -124,6 +127,42 @@ export default function DeployPage() {
     setDeploying(true)
 
     try {
+      // Network chain IDs
+      const networkChainIds: Record<string, string> = {
+        'sepolia': '0xaa36a7',
+        'arbitrum-sepolia': '0x66eee',
+        'ethereum': '0x1',
+        'arbitrum': '0xa4b1',
+        'polygon': '0x89',
+        'base': '0x2105'
+      }
+
+      const targetChainId = networkChainIds[selectedNetwork]
+      if (targetChainId) {
+        try {
+          await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: targetChainId }]
+          })
+        } catch (switchError: any) {
+          // Chain not added, try to add it
+          if (switchError.code === 4902 && selectedNetwork === 'arbitrum-sepolia') {
+            await window.ethereum.request({
+              method: 'wallet_addEthereumChain',
+              params: [{
+                chainId: '0x66eee',
+                chainName: 'Arbitrum Sepolia',
+                nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+                rpcUrls: ['https://sepolia-rollup.arbitrum.io/rpc'],
+                blockExplorerUrls: ['https://sepolia.arbiscan.io']
+              }]
+            })
+          } else {
+            throw switchError
+          }
+        }
+      }
+
       const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/deploy`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -141,13 +180,29 @@ export default function DeployPage() {
 
       const { bytecode, abi, contractName } = await response.json()
 
+      // Check if constructor needs arguments
+      const constructorAbi = abi.find((item: any) => item.type === 'constructor')
+      const constructorInputs = constructorAbi?.inputs || []
+      
+      if (constructorInputs.length > 0 && constructorArgs.length === 0) {
+        // Need constructor arguments - show form
+        setContractAbi(abi)
+        setShowConstructorForm(true)
+        setConstructorArgs(new Array(constructorInputs.length).fill(''))
+        setDeploying(false)
+        return
+      }
+
       const { ethers } = await import('ethers')
       const provider = new ethers.BrowserProvider(window.ethereum)
       const signer = await provider.getSigner()
 
       const factory = new ethers.ContractFactory(abi, bytecode, signer)
       
-      const contract = await factory.deploy()
+      // Deploy with constructor arguments if any
+      const contract = constructorArgs.length > 0 
+        ? await factory.deploy(...constructorArgs)
+        : await factory.deploy()
       await contract.waitForDeployment()
 
       const contractAddress = await contract.getAddress()
@@ -315,12 +370,41 @@ export default function DeployPage() {
             </div>
           </div>
 
+          {showConstructorForm && contractAbi.length > 0 && (
+            <div className="border-t border-border pt-6">
+              <h3 className="font-medium mb-4">Constructor Arguments</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                This contract requires the following constructor arguments:
+              </p>
+              <div className="space-y-3">
+                {contractAbi.find((item: any) => item.type === 'constructor')?.inputs?.map((input: any, index: number) => (
+                  <div key={index}>
+                    <label className="block text-sm font-medium mb-1">
+                      {input.name} ({input.type})
+                    </label>
+                    <input
+                      type="text"
+                      value={constructorArgs[index] || ''}
+                      onChange={(e) => {
+                        const newArgs = [...constructorArgs]
+                        newArgs[index] = e.target.value
+                        setConstructorArgs(newArgs)
+                      }}
+                      placeholder={`Enter ${input.name}`}
+                      className="w-full px-4 py-2 bg-secondary border border-border rounded-lg text-sm"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <button
             onClick={handleDeploy}
             disabled={!isConnected || deploying || !selectedProject}
             className="w-full py-3 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 disabled:opacity-50"
           >
-            {deploying ? 'Deploying...' : 'Deploy Contract'}
+            {deploying ? 'Deploying...' : showConstructorForm ? 'Deploy with Arguments' : 'Deploy Contract'}
           </button>
         </div>
 
@@ -347,12 +431,20 @@ export default function DeployPage() {
             </div>
 
             <a
-              href={`https://sepolia.etherscan.io/tx/${deployed.txHash}`}
+              href={
+                deployed.network === 'arbitrum-sepolia' ? `https://sepolia.arbiscan.io/tx/${deployed.txHash}` :
+                deployed.network === 'arbitrum' ? `https://arbiscan.io/tx/${deployed.txHash}` :
+                deployed.network === 'sepolia' ? `https://sepolia.etherscan.io/tx/${deployed.txHash}` :
+                deployed.network === 'ethereum' ? `https://etherscan.io/tx/${deployed.txHash}` :
+                deployed.network === 'polygon' ? `https://polygonscan.com/tx/${deployed.txHash}` :
+                deployed.network === 'base' ? `https://basescan.org/tx/${deployed.txHash}` :
+                `https://etherscan.io/tx/${deployed.txHash}`
+              }
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 text-primary hover:underline"
             >
-              View on Etherscan
+              View on Block Explorer
               <ExternalLink className="h-4 w-4" />
             </a>
           </div>
